@@ -1,0 +1,810 @@
+
+
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<style>
+  *,*:before,*:after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#111;
+    -webkit-touch-callout:none;-webkit-user-select:none;-moz-user-select:none;
+    -ms-user-select:none;user-select:none;-webkit-tap-highlight-color:rgba(0,0,0,0);}
+  canvas:focus{outline:none;}
+  body{display:flex;align-items:center;justify-content:center;}
+  #unity-container{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);}
+  #unity-canvas{width:100%;height:100%;display:block;background:#111;}
+  #loading-cover{position:absolute;top:0;left:0;width:100%;height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;background:#111;}
+  #unity-logo img{max-width:280px;margin-bottom:20px;pointer-events:none;}
+  #unity-progress-bar-empty{width:40%;height:8px;background:rgba(255,255,255,.15);border-radius:4px;overflow:hidden;}
+  #unity-progress-bar-full{height:100%;width:0%;background:linear-gradient(90deg,#f97316,#fb923c);transition:width .3s ease;}
+  .spinner,.spinner:after{border-radius:50%;width:4em;height:4em;}
+  .spinner{margin:16px;font-size:10px;position:relative;text-indent:-9999em;
+    border-top:0.8em solid rgba(255,255,255,.15);border-right:0.8em solid rgba(255,255,255,.15);
+    border-bottom:0.8em solid rgba(255,255,255,.15);border-left:0.8em solid #fb923c;
+    animation:spin 1.1s infinite linear;}
+  @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+  .load-label{color:#aaa;font-family:Arial,sans-serif;font-size:13px;margin-top:10px;}
+</style>
+</head>
+<body class="dark">
+
+<div id="unity-container" class="unity-desktop">
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+</div>
+<div id="loading-cover">
+  <div id="unity-logo"><img src="https://cdn.jsdelivr.net/gh/ftbaldana/yojex@main/Images/logo.png" onerror="this.style.display='none'"/></div>
+  <div class="spinner" id="spinner"></div>
+  <div id="unity-progress-bar-empty" style="display:none;">
+    <div id="unity-progress-bar-full"></div>
+  </div>
+  <div class="load-label" id="load-label">Loading... g+</div>
+</div>
+
+<script>
+window.YaGames = {
+  init: function() {
+    var sdk = {
+      environment:{app:{id:'0'},i18n:{lang:'en',tld:'com'},browser:{lang:'en'},payload:null},
+      deviceInfo:{type:'desktop',isMobile:function(){return false;},isDesktop:function(){return true;},isTablet:function(){return false;},isTV:function(){return false;}},
+      adv:{
+        showFullscreenAdv:function(o){if(o&&o.callbacks&&o.callbacks.onClose)o.callbacks.onClose(false);},
+        showRewardedVideo:function(o){if(!o||!o.callbacks)return;if(o.callbacks.onOpen)o.callbacks.onOpen();if(o.callbacks.onRewarded)o.callbacks.onRewarded();if(o.callbacks.onClose)o.callbacks.onClose();},
+        showBannerAdv:function(){},hideBannerAdv:function(){},getBannerAdvStatus:function(){return Promise.resolve({stickyAdvIsShowing:false});}
+      },
+      auth:{openAuthDialog:function(){return Promise.resolve();}},
+      feedback:{canReview:function(){return Promise.resolve({value:false,reason:''});},requestReview:function(){return Promise.resolve({feedbackSent:false});}},
+      shortcut:{canShowPrompt:function(){return Promise.resolve({canShow:false});},showPrompt:function(){return Promise.resolve({outcome:'rejected'});}},
+      getPayments:function(){return Promise.reject('no payments');},
+      getPlayer:function(){return Promise.resolve({
+        isAuthorized:function(){return false;},getName:function(){return 'Player';},getUniqueID:function(){return 'local-player';},getPhoto:function(){return '';},
+        getPayingStatus:function(){return 'unknown';},
+        setData:function(d){try{var st={};try{st=JSON.parse(localStorage.getItem('yg_saves')||'{}')||{};}catch(e){}for(var k in d)st[k]=d[k];localStorage.setItem('yg_saves',JSON.stringify(st));}catch(e){}return Promise.resolve();},
+        getData:function(keys){var st={};try{st=JSON.parse(localStorage.getItem('yg_saves')||'{}')||{};}catch(e){}if(!keys||!keys.length)return Promise.resolve(st);var o={};for(var i=0;i<keys.length;i++)if(st[keys[i]]!==undefined)o[keys[i]]=st[keys[i]];return Promise.resolve(o);},
+        getStats:function(){var st={};try{st=JSON.parse(localStorage.getItem('yg_stats')||'{}')||{};}catch(e){}return Promise.resolve(st);},
+        setStats:function(s){try{var st={};try{st=JSON.parse(localStorage.getItem('yg_stats')||'{}')||{};}catch(e){}for(var k in s)st[k]=s[k];localStorage.setItem('yg_stats',JSON.stringify(st));}catch(e){}return Promise.resolve();}
+      });},
+      getFlags:function(){return Promise.resolve({});},
+      serverTime:function(){return Promise.resolve(Date.now());},
+      on:function(){},
+      features:{LoadingAPI:{ready:function(){}},GameplayAPI:{start:function(){},stop:function(){}}}
+    };
+    return Promise.resolve(sdk);
+  }
+};
+console.log('[Stub] YaGames hazir, lang="en"');
+</script>
+
+<script>
+var CDN = "https://cdn.jsdelivr.net/gh/ftbaldana/yojex@3723a4d/Build";
+
+var LOADER    = "ca98492c4e603014560541ecf62d8174";
+var DATA_FILE = "a4e4e4588738c16ec10d71d22926ae68";
+var FRAMEWORK = "a25d3e539f772ceb6e8712015eceb9e4";
+var WASM_FILE = "7596a49439dcfec08e5215bed2a9eec3";
+
+var DATA_PART_LINKS = [
+  "https://cdn.jsdelivr.net/gh/ftbaldana/yojex@3723a4d/Build/a4e4e4588738c16ec10d71d22926ae68.data.br.part0",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/yojex@3723a4d/Build/a4e4e4588738c16ec10d71d22926ae68.data.br.part1",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/yojex@3723a4d/Build/a4e4e4588738c16ec10d71d22926ae68.data.br.part2",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/yojex@3723a4d/Build/a4e4e4588738c16ec10d71d22926ae68.data.br.part3"
+];
+
+var WASM_PART_LINKS = [
+  "https://cdn.jsdelivr.net/gh/ftbaldana/zubli@main/Build/7596a49439dcfec08e5215bed2a9eec3.wasm.br.part0",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/zubli@main/Build/7596a49439dcfec08e5215bed2a9eec3.wasm.br.part1",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/zubli@main/Build/7596a49439dcfec08e5215bed2a9eec3.wasm.br.part2",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/zubli@main/Build/7596a49439dcfec08e5215bed2a9eec3.wasm.br.part3",
+  "https://cdn.jsdelivr.net/gh/ftbaldana/zubli@main/Build/7596a49439dcfec08e5215bed2a9eec3.wasm.br.part4"
+];
+
+var buildUrl = CDN;
+
+var config = {
+  dataUrl: null,
+  frameworkUrl: buildUrl + "/" + FRAMEWORK + ".framework.js",
+  codeUrl: null,
+  streamingAssetsUrl: "StreamingAssets",
+  companyName: "polar men",
+  productName: "Dig out of Prison",
+  productVersion: "0.1"
+};
+
+var container        = document.querySelector("#unity-container");
+var canvas           = document.querySelector("#unity-canvas");
+var loadingCover     = document.querySelector("#loading-cover");
+var progressBarEmpty = document.querySelector("#unity-progress-bar-empty");
+var progressBarFull  = document.querySelector("#unity-progress-bar-full");
+var spinner          = document.querySelector("#spinner");
+var loadLabel        = document.querySelector("#load-label");
+
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent))
+  container.className = "unity-mobile";
+
+var NO_DATA = 'no data';
+var StartUnityInstance;
+var ygGameInstance = null;
+var ysdk = null;
+var initYSDK = false;
+var initGame = false;
+var syncInit = false;
+var isVisibility = true;
+var isPausedGame = false;
+var cloudSaves = NO_DATA;
+var statsSaves = NO_DATA;
+var reviewData = 'false';
+var gameLabelData = 'false';
+var paymentsData = NO_DATA;
+var payments = null;
+var player = null;
+var environmentData = NO_DATA;
+var playerData = NO_DATA;
+var flasgsData = NO_DATA;
+var nowFullAdOpen = false;
+
+document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+document.addEventListener('visibilitychange', function(){ SetVisibility(!document.hidden); });
+window.addEventListener('blur',  function(){ SetVisibility(false); });
+window.addEventListener('focus', function(){ SetVisibility(true); });
+window.addEventListener('pointerdown', function(){ FocusGame(); SetVisibility(true); });
+
+var oRPL = Element.prototype.requestPointerLock;
+Element.prototype.requestPointerLock = async function hkRPL() {
+  var args = Array.from(arguments);
+  try {
+    (args[0] = args[0] || {}).unadjustedMovement = true;
+    await oRPL.apply(this, args);
+  } catch(e){ console.log(e); }
+};
+
+function InstallBlurFocusBlocker() {
+  if (!('onblur' in document) || window.blurFocusHandlersInstalled) return;
+  window.addEventListener('blur', function() {
+    var btn = document.createElement('button');
+    Object.assign(btn.style, {position:'fixed',top:'0',left:'0',width:'100%',height:'100%',
+      zIndex:'9999',backgroundColor:'rgba(0,0,0,0)',border:'none',cursor:'default'});
+    document.body.appendChild(btn);
+    window.addEventListener('focus', function rem(){
+      btn.parentNode && btn.parentNode.removeChild(btn);
+      window.removeEventListener('focus', rem);
+    });
+  });
+  window.blurFocusHandlersInstalled = true;
+}
+
+function FocusGame(){ if (!isPausedGame) canvas.focus(); }
+
+function SetVisibility(v) {
+  if (ysdk !== null && initGame === true && isVisibility !== v) {
+    isVisibility = v;
+    YG2Instance('SetFocusWindowGame', v ? 'true' : 'false');
+  }
+}
+
+function PauseCallback()  { isPausedGame = true;  YG2Instance('SetPauseGame', 'true');  }
+function ResumeCallback() { isPausedGame = false; YG2Instance('SetPauseGame', 'false'); }
+
+async function fetchPartsFromLinks(links, label) {
+  var parts = [];
+  for (var i = 0; i < links.length; i++) {
+    loadLabel.textContent = label + ' ' + (i + 1) + '/' + links.length + '...';
+    var r = await fetch(links[i]);
+    if (!r.ok) throw new Error(label + ' part' + i + ': HTTP ' + r.status + ' - ' + links[i]);
+    parts.push(new Uint8Array(await r.arrayBuffer()));
+
+    progressBarEmpty.style.display = "";
+    var percent = label === 'Data'
+      ? ((i + 1) / links.length) * 40
+      : 40 + ((i + 1) / links.length) * 40;
+    progressBarFull.style.width = percent + '%';
+  }
+
+  var total = parts.reduce(function(s,p){ return s + p.length; }, 0);
+  var merged = new Uint8Array(total);
+  var off = 0;
+  for (var j = 0; j < parts.length; j++) {
+    merged.set(parts[j], off);
+    off += parts[j].length;
+  }
+  return merged;
+}
+
+function brotliBlobUrl(uint8, filename) {
+  var blob = new Blob([uint8], { type:'application/octet-stream' });
+  return URL.createObjectURL(blob) + '#' + encodeURIComponent(filename);
+}
+
+var script = document.createElement("script");
+script.src = buildUrl + "/" + LOADER + ".loader.js";
+script.onload = async function() {
+  try {
+    var dataBytes = await fetchPartsFromLinks(DATA_PART_LINKS, 'Data');
+    var wasmBytes = await fetchPartsFromLinks(WASM_PART_LINKS, 'WASM');
+
+    config.dataUrl = brotliBlobUrl(dataBytes, DATA_FILE + ".data.br");
+    config.codeUrl = brotliBlobUrl(wasmBytes, WASM_FILE + ".wasm.br");
+  } catch(e) {
+    console.error("Download error:", e);
+    loadLabel.textContent = 'Error: ' + e.message;
+    loadLabel.style.color = 'red';
+    return;
+  }
+
+  StartUnityInstance = function() {
+    createUnityInstance(canvas, config, function(progress){
+      spinner.style.display = "none";
+      progressBarEmpty.style.display = "";
+      progressBarFull.style.width = (80 + progress * 20) + '%';
+    }).then(function(inst){
+      ygGameInstance = inst;
+      loadingCover.style.display = "none";
+    }).catch(function(msg){ console.error(msg); });
+  };
+
+  InstallBlurFocusBlocker();
+  StartUnityInstance_IfUnloaded();
+};
+
+function StartUnityInstance_IfUnloaded(){
+  if (typeof StartUnityInstance === 'function' && spinner.style.display !== "none")
+    StartUnityInstance();
+}
+
+function IsLocalHost(){
+  try {
+    if (window.top !== window) return false;
+    var h = window.location.hostname;
+    return h==="localhost"||h==="127.0.0.1"||h.endsWith(".local");
+  } catch(e){ return false; }
+}
+
+function YG2Instance(method, arg) {
+  if (ygGameInstance == null) return;
+  var send = function(){
+    arg !== undefined
+      ? ygGameInstance.SendMessage('YG2Instance', method, arg)
+      : ygGameInstance.SendMessage('YG2Instance', method);
+  };
+  if (!initGame) setTimeout(send, 100); else send();
+}
+
+function LogStyledMessage(msg){
+  console.log('%c'+msg,'color:#FFDF73;background-color:#454545');
+}
+
+InitYSDK();
+
+async function InitYSDK() {
+  try {
+    if (IsLocalHost()) return;
+    ysdk = await YaGames.init();
+    ysdk.on('game_api_pause',  PauseCallback);
+    ysdk.on('game_api_resume', ResumeCallback);
+    await RequestingEnvironmentData();
+    await InitPlayer();
+    await LoadCloud();
+    await InitReview();
+    await GetStats();
+    await InitPayments();
+    await InitGameLabel();
+    await GetFlags();
+    initYSDK = true;
+    if (ygGameInstance != null) ygGameInstance.SendMessage('YG2Instance','InitSDKComplete');
+  } catch(e){ console.error('CRASH Init SDK:', e); }
+  if (!IsLocalHost() && !syncInit) StartUnityInstance_IfUnloaded();
+}
+
+function InitGame(){
+  initGame = true;
+  setTimeout(function(){ if(isPausedGame) YG2Instance('SetPauseGame','true'); }, 100);
+}
+
+function SaveCloud(jsonData, flush) {
+  if (!player){ console.error('CRASH Save Cloud: no player'); return; }
+  try { player.setData({ saves:[jsonData] }, flush); } catch(e){ console.error(e); }
+}
+
+function LoadCloud() {
+  return new Promise(function(resolve){
+    if (!ysdk){ Final(NO_DATA); return; }
+    try {
+      player.getData(["saves"]).then(function(data){
+        Final(data.saves ? JSON.stringify(data.saves) : NO_DATA);
+      }).catch(function(){ Final(NO_DATA); });
+    } catch(e){ Final(NO_DATA); }
+    function Final(r){ cloudSaves=r; YG2Instance('SetLoadSaves',r); resolve(r); }
+  });
+}
+
+function GetStats() {
+  return new Promise(function(resolve){
+    if (!ysdk){ Final(NO_DATA); return; }
+    try {
+      player.getStats().then(function(s){ Final(JSON.stringify(s)); })
+        .catch(function(){ Final(NO_DATA); });
+    } catch(e){ Final(NO_DATA); }
+    function Final(r){ statsSaves=r; YG2Instance('ReceiveStats',r); resolve(r); }
+  });
+}
+
+function SetStats(jsonStats) {
+  if (!ysdk||!player){ return; }
+  try { player.setStats(JSON.parse(jsonStats)); } catch(e){ console.error(e); }
+}
+
+function StickyAdActivity(show) {
+  try {
+    ysdk.adv.getBannerAdvStatus().then(function(d){
+      if (d.stickyAdvIsShowing){ if (!show) ysdk.adv.hideBannerAdv(); }
+      else if (show) ysdk.adv.showBannerAdv();
+    });
+  } catch(e){ console.error(e); }
+}
+
+function RewardedAdvShow(id) {
+  try {
+    ysdk.adv.showRewardedVideo({ callbacks: {
+      onOpen:function(){ YG2Instance('OpenRewardedAdv'); },
+      onClose:function(){ YG2Instance('CloseRewardedAdv'); FocusGame(); },
+      onRewarded:function(){ YG2Instance('RewardAdv', id); },
+      onError:function(){ YG2Instance('ErrorRewardedAdv'); }
+    }});
+  } catch(err){ console.error('CRASH Rewarded:', err.message); }
+}
+
+function InterAdvShow() {
+  try {
+    if (!ysdk||nowFullAdOpen) return;
+    ysdk.adv.showFullscreenAdv({ callbacks: {
+      onOpen:function(){ nowFullAdOpen=true; if(initGame) YG2Instance('OpenInterAdv'); },
+      onClose:function(was){ nowFullAdOpen=false; if(initGame) YG2Instance('CloseInterAdv', was?'true':'false'); FocusGame(); },
+      onError:function(){ nowFullAdOpen=false; YG2Instance('ErrorInterAdv'); FocusGame(); }
+    }});
+  } catch(e){ console.error(e); }
+}
+
+function InitReview() {
+  return new Promise(function(resolve){
+    if (!ysdk){ resolve('false'); return; }
+    try {
+      ysdk.feedback.canReview().then(function(d){
+        if (d.value) reviewData='true';
+        resolve(d.value?'true':'false');
+      });
+    } catch(e){ resolve('false'); }
+  });
+}
+
+function Review() {
+  try {
+    ysdk.feedback.canReview().then(function(d){
+      if (d.value) {
+        ysdk.feedback.requestReview().then(function(r){
+          YG2Instance('ReviewSent', r.feedbackSent?'true':'false');
+          FocusGame();
+        });
+      } else FocusGame();
+    });
+  } catch(e){ FocusGame(); }
+}
+
+function InitPayments() {
+  return new Promise(function(resolve){
+    try {
+      if (!ysdk){ Final(NO_DATA); return; }
+      ysdk.getPayments().then(function(_p){
+        payments=_p;
+        Final(NO_DATA);
+      }).catch(function(){ Final(NO_DATA); });
+    } catch(e){ Final(NO_DATA); }
+    function Final(r){ paymentsData=r; YG2Instance('PaymentsEntries',r); resolve(r); }
+  });
+}
+
+function BuyPayments(id) {
+  try {
+    if (!payments){ YG2Instance('OnPurchaseFailed',id); return; }
+    payments.purchase(id).then(function(){ ConsumePurchase(id,true); FocusGame(); })
+      .catch(function(){ YG2Instance('OnPurchaseFailed',id); FocusGame(); });
+  } catch(e){ YG2Instance('OnPurchaseFailed',id); FocusGame(); }
+}
+
+function ConsumePurchase(id, ok) {
+  try {
+    if (!payments) return;
+    payments.getPurchases().then(function(ps){
+      for(var i=0;i<ps.length;i++){
+        if(ps[i].productID===id){
+          payments.consumePurchase(ps[i].purchaseToken);
+          if(ok) YG2Instance('OnPurchaseSuccess',id);
+        }
+      }
+    });
+  } catch(e){}
+}
+
+function ConsumePurchases(ok) {
+  try {
+    if (!payments) return;
+    payments.getPurchases().then(function(ps){
+      for(var i=0;i<ps.length;i++){
+        payments.consumePurchase(ps[i].purchaseToken);
+        if(ok) YG2Instance('OnPurchaseSuccess',ps[i].productID);
+      }
+    });
+  } catch(e){}
+}
+
+function InitGameLabel() {
+  return new Promise(function(resolve){
+    if (!ysdk){ resolve('false'); return; }
+    try {
+      ysdk.shortcut.canShowPrompt().then(function(p){
+        if(p.canShow){ gameLabelData='true'; resolve('true'); }
+        else resolve('false');
+      });
+    } catch(e){ resolve('false'); }
+  });
+}
+
+function GameLabelShowDialog() {
+  try {
+    ysdk.shortcut.showPrompt().then(function(r){
+      YG2Instance(r.outcome==='accepted'?'OnGameLabelSuccess':'OnGameLabelFail');
+      FocusGame();
+    });
+  } catch(e){ FocusGame(); }
+}
+
+function GetFlags() {
+  return new Promise(function(resolve){
+    if (!ysdk){ Final(NO_DATA); return; }
+    try {
+      ysdk.getFlags().then(function(flags){
+        var names=[],values=[];
+        for(var k in flags){ if(flags.hasOwnProperty(k)){ names.push(k); values.push(flags[k]); } }
+        Final(JSON.stringify({names:names,values:values}));
+      });
+    } catch(e){ Final(NO_DATA); }
+    function Final(r){ flasgsData=r; resolve(r); }
+  });
+}
+
+function RequestingEnvironmentData() {
+  return new Promise(function(resolve){
+    if (!ysdk){ Final(NO_DATA); return; }
+    try {
+      Final(JSON.stringify({
+        language:ysdk.environment.i18n.lang,
+        domain:ysdk.environment.i18n.tld,
+        deviceType:ysdk.deviceInfo.type,
+        isMobile:ysdk.deviceInfo.isMobile(),
+        isDesktop:ysdk.deviceInfo.isDesktop(),
+        isTablet:ysdk.deviceInfo.isTablet(),
+        isTV:ysdk.deviceInfo.isTV(),
+        appID:ysdk.environment.app.id,
+        browserLang:ysdk.environment.browser.lang,
+        payload:ysdk.environment.payload,
+        platform:navigator.platform,
+        browser:'Chrome'
+      }));
+    } catch(e){ Final(NO_DATA); }
+    function Final(r){ environmentData=r; YG2Instance('SetEnvirData',r); resolve(r); }
+  });
+}
+
+async function InitPlayer() {
+  return new Promise(async function(resolve){
+    try {
+      if (!ysdk) return Final(NotAuthorized(false));
+      player = await ysdk.getPlayer();
+      if (!player.isAuthorized()) return Final(NotAuthorized());
+      return Final(JSON.stringify({
+        playerAuth:'resolved',
+        playerName:player.getName(),
+        playerId:player.getUniqueID(),
+        playerPhoto:player.getPhoto('medium'),
+        payingStatus:player.getPayingStatus()
+      }));
+    } catch(e){ return Final(NotAuthorized(false)); }
+    function Final(r){ playerData=r; YG2Instance('SetAuth',r); resolve(r); }
+  });
+}
+
+function NotAuthorized(isInitSDK) {
+  if (isInitSDK===undefined) isInitSDK=true;
+  return JSON.stringify({
+    playerAuth:'rejected',
+    playerName:'unauthorized',
+    playerId:isInitSDK&&player ? player.getUniqueID() : 'unauthorized',
+    playerPhoto:'no data',
+    payingStatus:'unknown'
+  });
+}
+
+function OpenAuthDialog() {
+  if (!ysdk) return;
+  try {
+    ysdk.auth.openAuthDialog().then(function(){
+      InitPlayer().then(function(){ YG2Instance('LoggedIn'); });
+    });
+  } catch(e){}
+}
+
+document.body.appendChild(script);
+</script>
+
+<script>
+var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||
+  (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(isIOS){
+  document.documentElement.style.height='100%';
+  document.body.style.cssText+=';height:100%;position:fixed;width:100%';
+  document.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+#modBtn{position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:8px 14px;background:#000;color:#0f0;border:1px solid #0f0;font:bold 13px monospace;cursor:pointer}
+#modBtn:hover{background:#0f0;color:#000}
+#modPanel{position:fixed;right:10px;bottom:50px;z-index:2147483647;display:none;width:280px;max-height:82vh;overflow:auto;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace}
+#modPanel.open{display:block}
+#modPanel .head{display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid #0f0;font-weight:bold}
+#modPanel .head span{cursor:pointer}
+#modPanel .body{padding:8px}
+#modPanel .sec{margin:8px 0 2px;padding:0 2px;color:#9f9;font-weight:bold;font-size:10px;letter-spacing:1px}
+#modPanel button{display:block;width:100%;margin:5px 0;padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace;cursor:pointer}
+#modPanel button:hover{background:#0f0;color:#000}
+#modNote{margin-top:6px;border-top:1px solid #0f0;padding-top:5px;min-height:12px;overflow-wrap:anywhere}
+#modEspTag{position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:2147483647;display:none;padding:6px 12px;background:rgba(0,0,0,.85);color:#0f0;border:1px solid #0f0;border-radius:5px;font:bold 11px monospace;text-shadow:0 0 6px #0f0;pointer-events:none;text-align:center}
+#modNotice{position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:250px;padding:10px 12px;background:#000;color:#0f0;border:1px solid #0f0;border-radius:6px;font:bold 12px monospace;box-shadow:0 0 14px rgba(0,255,0,.35);cursor:pointer;opacity:0;transform:scale(.4);pointer-events:none}
+#modNotice.center{left:50%;top:50%;bottom:auto;max-width:340px;padding:16px 20px;border-width:2px;font:bold 16px monospace;text-align:center;transform:translate(-50%,-50%) scale(.4)}
+#modNotice.show{animation:modPop .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite;pointer-events:auto}
+#modNotice.center.show{animation:modPopC .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite}
+#modNotice.hide{animation:modOut .35s ease forwards;pointer-events:none}
+#modNotice.center.hide{animation:modOutC .35s ease forwards}
+#modNotice span{display:block;margin-top:4px;color:#9f9;font-weight:normal;font-size:10.5px}
+#modNotice.center span{margin-top:6px;font-size:11.5px}
+@keyframes modPop{0%{opacity:0;transform:scale(.4) translateY(24px)}60%{opacity:1;transform:scale(1.1) translateY(-6px)}80%{transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes modOut{to{opacity:0;transform:scale(.7) translateY(10px)}}
+@keyframes modPopC{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}60%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}80%{transform:translate(-50%,-50%) scale(.96)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes modOutC{to{opacity:0;transform:translate(-50%,-50%) scale(.7)}}
+@keyframes modPulse{0%,100%{box-shadow:0 0 12px rgba(0,255,0,.35)}50%{box-shadow:0 0 22px rgba(255,45,149,.8)}}
+</style>
+<button id="modBtn" type="button">MODS</button>
+<div id="modPanel">
+<div class="head">DIG OUT OF PRISON MODS <span id="modClose">X</span></div>
+<div class="body">
+<div class="sec">CHEATS</div>
+<button id="modTP" type="button">EDIT TOILET PAPER</button>
+<button id="modStorage" type="button">INF STORAGE: OFF</button>
+<button id="modEnergy" type="button">INF ENERGY: OFF</button>
+<button id="modTools" type="button">GIVE ALL TOOLS</button>
+<button id="modEsp" type="button">ITEM ESP: OFF</button>
+<button id="modGuard" type="button">BRING THE GUARD TO YOUR CELL</button>
+<button id="modRuin" type="button">RUIN THE FUN</button>
+<div class="sec">TOOLS</div>
+<button id="modWipe" type="button">WIPE SAVE</button>
+<div id="modNote">ready</div>
+</div>
+</div>
+<div id="modEspTag">ITEM ESP: ON<br><span style="color:#9f9;font-weight:normal">items revealed + highlighted (aim at one to see its name)</span></div>
+<div id="modNotice">MOD PANEL AVAILABLE<span>click MODS (bottom right) to open</span></div>
+<script>
+(function(){
+try{
+var _ce=console.error,_cw=console.warn;
+console.error=function(){try{if(String(arguments[0]).indexOf("SendMessage:")>=0)return;}catch(e){}return _ce.apply(console,arguments);};
+console.warn=function(){try{if(String(arguments[0]).indexOf("SendMessage:")>=0)return;}catch(e){}return _cw.apply(console,arguments);};
+}catch(e){}
+var noteEl=document.getElementById("modNote");
+function note(s){noteEl.textContent=s;}
+var panel=document.getElementById("modPanel");
+var notice=document.getElementById("modNotice");
+document.getElementById("modBtn").onclick=function(){hideNotice();panel.classList.toggle("open");refreshLabels();};
+document.getElementById("modClose").onclick=function(){panel.classList.remove("open");};
+window.addEventListener("keydown",function(e){if(e.key==="`"){panel.classList.toggle("open");refreshLabels();}});
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function readSave(){
+try{
+var raw=localStorage.getItem("YG2_SavesData");
+if(!raw){var o=JSON.parse(localStorage.getItem("yg_saves")||"null");if(o&&o.saves&&o.saves[0])raw=o.saves[0];}
+if(!raw)return null;
+return JSON.parse(raw);
+}catch(e){return null;}
+}
+function writeSave(inner){
+var s=JSON.stringify(inner);
+try{localStorage.setItem("YG2_SavesData",s);}catch(e){}
+try{localStorage.setItem("yg_saves",JSON.stringify({saves:[s]}));}catch(e){}
+}
+async function ensureSave(){
+var inner=readSave();
+if(inner)return inner;
+try{if(window.ygGameInstance&&ygGameInstance.SendMessage)ygGameInstance.SendMessage("ProgressSaver","SaveAll");}catch(e){}
+await sleep(1500);
+return readSave();
+}
+function sd(inner){if(!inner.SaveData)inner.SaveData={};return inner.SaveData;}
+function reloadSoon(){setTimeout(function(){location.reload();},800);}
+function refreshLabels(){
+var inner=readSave();
+var st=document.getElementById("modStorage");
+var en=document.getElementById("modEnergy");
+var esp=document.getElementById("modEsp");
+if(esp)esp.textContent="ITEM ESP: "+(localStorage.getItem("dig_item_esp")==="1"?"ON":"OFF");
+if(!inner){st.textContent="INF STORAGE: ?";en.textContent="INF ENERGY: ?";return;}
+var d=sd(inner);
+st.textContent="INF STORAGE: "+((d.InventoryCapacity||5)>100?"ON":"OFF");
+en.textContent="INF ENERGY: "+((d.EnegryCapacity||40)>1000?"ON":"OFF");
+}
+document.getElementById("modTP").onclick=async function(){
+var v=prompt("How much toilet paper do you want?");
+if(v===null)return;
+var n=parseInt(v,10);
+if(isNaN(n)||n<0){note("enter a number");return;}
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+sd(inner).Money=n;
+writeSave(inner);
+note("toilet paper set to "+n+" - reloading");
+reloadSoon();
+};
+document.getElementById("modStorage").onclick=async function(){
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+var d=sd(inner);
+var on=(d.InventoryCapacity||5)>100;
+d.InventoryCapacity=on?5:9999;
+writeSave(inner);
+note(on?"infinite storage OFF - reloading":"infinite storage ON - reloading");
+reloadSoon();
+};
+document.getElementById("modEnergy").onclick=async function(){
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+var d=sd(inner);
+var on=(d.EnegryCapacity||40)>1000;
+d.EnegryCapacity=on?40:99999;
+d.CurrentEnergy=on?40:99999;
+writeSave(inner);
+note(on?"infinite energy OFF - reloading":"infinite energy ON - reloading");
+reloadSoon();
+};
+document.getElementById("modTools").onclick=async function(){
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+var d=sd(inner);
+d.HandShovel=4;
+d.BedShovel=4;
+d.HandRope=1;
+d.RopeSpeed=2;
+writeSave(inner);
+note("all tools given - reloading");
+reloadSoon();
+};
+document.getElementById("modGuard").onclick=function(){
+if(!window.ygGameInstance){note("game not loaded yet");return;}
+try{ygGameInstance.SendMessage("GuardianStateSetter","SetGoToPrisonerState");note("the guard is coming to your cell");}catch(e){note("failed: "+e.message);}
+};
+var ESP_ITEMS=["1toSell_clock","1toSell_clock (1)","1toSell_clock (2)","1toSell_clock (3)","1toSell_clock (4)","2toSell_ball","2toSell_ball (1)","2toSell_ball (2)","3toSell_boot","3toSell_boot (1)","3toSell_boot (2)","3toSell_boot (3)","4toSell_phone","5toSell_rubberduck","5toSell_rubberduck (1)","5toSell_rubberduck (2)","5toSell_rubberduck (4)","6toSell_soap","6toSell_soap (1)","7toSell_wrench","7toSell_wrench (1)","7toSell_wrench (2)","7toSell_wrench (4)","1Clock","4Phone","7Wrench","9Diamond","DirtItem"];
+var espTimer=null;
+function startEspRuntime(){
+if(localStorage.getItem("dig_item_esp")!=="1"){espTag(false);return;}
+espTag(true);
+if(espTimer)clearInterval(espTimer);
+var light=["1toSell_clock","DirtItem"];
+var burst=function(){
+try{
+if(document.hidden)return;
+if(!window.ygGameInstance)return;
+ESP_ITEMS.forEach(function(g){ygGameInstance.SendMessage(g,"EnableOutline");});
+}catch(e){}
+};
+var tick=function(){
+try{
+if(document.hidden)return;
+if(!window.ygGameInstance)return;
+light.forEach(function(g){ygGameInstance.SendMessage(g,"EnableOutline");});
+}catch(e){}
+};
+setTimeout(burst,3000);
+setTimeout(burst,6000);
+var n=0;
+espTimer=setInterval(function(){n++;tick();if(n%6===0)burst();},5000);
+}
+document.getElementById("modEsp").onclick=async function(){
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+var on=localStorage.getItem("dig_item_esp")==="1";
+if(!on){
+try{localStorage.setItem("dig_esp_snap",JSON.stringify({a:(inner.ActivatorResources||{}).ActiveItems||null,b:(inner.ResourcesObjects||{}).ObjectStates||null}));}catch(e){}
+try{if(inner.ActivatorResources&&inner.ActivatorResources.ActiveItems){for(var i=0;i<inner.ActivatorResources.ActiveItems.length;i++)inner.ActivatorResources.ActiveItems[i]=true;}}catch(e){}
+try{if(inner.ResourcesObjects&&inner.ResourcesObjects.ObjectStates){for(var j=0;j<inner.ResourcesObjects.ObjectStates.length;j++)inner.ResourcesObjects.ObjectStates[j]=true;}}catch(e){}
+try{localStorage.setItem("dig_item_esp","1");}catch(e){}
+writeSave(inner);
+note("ITEM ESP ON - all items revealed + highlighted - reloading");
+}else{
+try{var snap=JSON.parse(localStorage.getItem("dig_esp_snap")||"null");
+if(snap){
+if(snap.a&&inner.ActivatorResources)inner.ActivatorResources.ActiveItems=snap.a;
+if(snap.b&&inner.ResourcesObjects)inner.ResourcesObjects.ObjectStates=snap.b;
+}else{
+if(inner.ActivatorResources&&inner.ActivatorResources.ActiveItems){for(var i2=0;i2<inner.ActivatorResources.ActiveItems.length;i2++)inner.ActivatorResources.ActiveItems[i2]=false;}
+if(inner.ResourcesObjects&&inner.ResourcesObjects.ObjectStates){for(var j2=0;j2<inner.ResourcesObjects.ObjectStates.length;j2++)inner.ResourcesObjects.ObjectStates[j2]=false;}
+}
+}catch(e){}
+try{localStorage.setItem("dig_item_esp","0");}catch(e){}
+if(espTimer)clearInterval(espTimer);
+espTag(false);
+writeSave(inner);
+note("ITEM ESP OFF - reloading");
+}
+reloadSoon();
+};
+document.getElementById("modRuin").onclick=async function(){
+var inner=await ensureSave();
+if(!inner){note("couldn't read the save - play one run first");return;}
+var d=sd(inner);
+d.Money=999999999;
+d.InventoryCapacity=9999;
+d.EnegryCapacity=999999;
+d.CurrentEnergy=999999;
+d.HandShovel=4;
+d.BedShovel=4;
+d.HandRope=1;
+d.RopeSpeed=5;
+d.Days=999;
+d.GuardTimer=999999;
+try{if(inner.ActivatorResources&&inner.ActivatorResources.ActiveItems){for(var i=0;i<inner.ActivatorResources.ActiveItems.length;i++)inner.ActivatorResources.ActiveItems[i]=true;}}catch(e){}
+try{if(inner.ResourcesObjects&&inner.ResourcesObjects.ObjectStates){for(var j=0;j<inner.ResourcesObjects.ObjectStates.length;j++)inner.ResourcesObjects.ObjectStates[j]=true;}}catch(e){}
+writeSave(inner);
+try{if(window.ygGameInstance){ygGameInstance.SendMessage("GuardianStateSetter","SetGoToPrisonerState");}}catch(e){}
+note("FUN RUINED - everything maxed!");
+reloadSoon();
+};
+document.getElementById("modWipe").onclick=function(){
+if(!confirm("Wipe the save and reload?"))return;
+try{localStorage.removeItem("yg_saves");localStorage.removeItem("YG2_SavesData");localStorage.removeItem("yg_stats");localStorage.removeItem("WasFirstGameSession_YG");localStorage.removeItem("dig_item_esp");localStorage.removeItem("dig_esp_snap");}catch(e){}
+try{if(indexedDB.databases){indexedDB.databases().then(function(dbs){dbs.forEach(function(db){if(db.name)indexedDB.deleteDatabase(db.name);});location.reload();});return;}}catch(e){}
+location.reload();
+};
+function hideNotice(){notice.classList.remove("show");notice.classList.add("hide");setTimeout(function(){notice.classList.remove("hide");notice.classList.remove("center");},400);}
+var nAudio=null,played=false,noticeTimer=null;
+function sound(){if(played||!notice.classList.contains("show"))return;try{var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;if(!nAudio||nAudio.state==="closed")nAudio=new AC();var go=function(){if(played||nAudio.state!=="running")return;played=true;var t=nAudio.currentTime;[880,1174.66].forEach(function(f,i){var o=nAudio.createOscillator(),g=nAudio.createGain();o.type="sine";o.frequency.setValueAtTime(f,t+i*.09);g.gain.setValueAtTime(.0001,t+i*.09);g.gain.exponentialRampToValueAtTime(.09,t+i*.09+.02);g.gain.exponentialRampToValueAtTime(.0001,t+i*.09+.35);o.connect(g).connect(nAudio.destination);o.start(t+i*.09);o.stop(t+i*.09+.4);});};if(nAudio.state==="suspended")nAudio.resume().then(go).catch(function(){});else go();}catch(e){}}
+function showNotice(dur){notice.classList.add("show");sound();window.addEventListener("pointerdown",sound,{once:true});window.addEventListener("keydown",sound,{once:true});if(noticeTimer)clearTimeout(noticeTimer);noticeTimer=setTimeout(hideNotice,dur||11000);}
+function popup(title,sub,dur){
+var nodes=notice.childNodes;
+for(var i=0;i<nodes.length;i++){if(nodes[i].nodeType===3){nodes[i].nodeValue=title;break;}}
+var sp=notice.getElementsByTagName("span")[0];
+if(sp)sp.textContent=sub||"";
+notice.classList.add("center");
+notice.classList.remove("hide");
+notice.classList.remove("show");
+void notice.offsetWidth;
+played=false;
+showNotice(dur||5000);
+}
+notice.onclick=function(){hideNotice();panel.classList.add("open");refreshLabels();};
+setTimeout(function(){notice.classList.remove("center");showNotice();},1200);
+refreshLabels();
+startEspRuntime();
+})();
+</script>
+
+</body>
+</html>
+

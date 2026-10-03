@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/style.css"/>
+<style>
+canvas:focus { outline: none; }
+html, body {
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+  height: 100%;
+  background: #000;
+}
+#unity-container { width: 100%; height: 100%; }
+#unity-canvas { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body class="dark">
+<div id="unity-container" class="unity-desktop">
+<canvas id="unity-canvas" tabindex="-1"></canvas>
+</div>
+<div id="loading-cover" style="display:none;">
+<div id="unity-loading-bar">
+<div id="unity-logo"><img src="https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Images/logo.png"/></div>
+<div id="unity-progress-bar-empty" style="display: none;">
+<div id="unity-progress-bar-full"></div>
+</div>
+<div class="spinner"></div>
+</div>
+</div>
+
+<script>
+window.GAME_FILES = {
+  LOADER:     "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/7a2dbded24d57e056180125b1583e7c4.loader.js",
+  FRAMEWORK:  "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/1426a7610138929120a20e659bc71fbe.framework.js",
+  WASM:       "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/ab5ad7cd6248d92c6af06bebd769ce68.wasm.br",
+  DATA_PARTS: [
+    "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/e6162e37eb1452ce5115869403d4971f.data.br.part0",
+    "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/e6162e37eb1452ce5115869403d4971f.data.br.part1",
+    "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/e6162e37eb1452ce5115869403d4971f.data.br.part2",
+    "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/Build/e6162e37eb1452ce5115869403d4971f.data.br.part3"
+  ],
+  STREAMING:  "https://cdn.jsdelivr.net/gh/tsubasamasa/rag@0c8810c/StreamingAssets",
+  BROTLI:     "https://cdn.jsdelivr.net/npm/brotli-dec-wasm@2.3.2/index.js",
+  LANG: "en"
+};
+</script>
+
+<script>
+(function () {
+  var G = window.GAME_FILES;
+  function noop() {}
+  function res(v) { return Promise.resolve(v); }
+
+  function deep() {
+    var f = function () { return res(deep()); };
+    return new Proxy(f, {
+      get: function (t, p) {
+        if (p === "then" || p === "catch" || p === "finally") return undefined;
+        if (typeof p === "symbol") return undefined;
+        return deep();
+      },
+      apply: function () { return res(undefined); }
+    });
+  }
+
+  var store = {};
+  var stats = {};
+  try { store = JSON.parse(localStorage.getItem("yg2_saves") || "{}") || {}; } catch (e) { store = {}; }
+  try { stats = JSON.parse(localStorage.getItem("yg2_stats") || "{}") || {}; } catch (e) { stats = {}; }
+  function persist() {
+    try { localStorage.setItem("yg2_saves", JSON.stringify(store)); } catch (e) {}
+    try { localStorage.setItem("yg2_stats", JSON.stringify(stats)); } catch (e) {}
+  }
+
+  var playerObj = {
+    getData: function (keys) {
+      if (!keys || !keys.length) return res(store);
+      var o = {};
+      for (var i = 0; i < keys.length; i++) if (store[keys[i]] !== undefined) o[keys[i]] = store[keys[i]];
+      return res(o);
+    },
+    setData: function (d) { for (var k in d) store[k] = d[k]; persist(); return res(true); },
+    getStats: function () { return res(stats); },
+    setStats: function (s) { for (var k in s) stats[k] = s[k]; persist(); return res(true); },
+    incrementStats: function (s) {
+      for (var k in s) stats[k] = (stats[k] || 0) + s[k];
+      persist();
+      return res(stats);
+    },
+    getName: function () { return "Player"; },
+    getPhoto: function () { return "no data"; },
+    getUniqueID: function () { return "local-player"; },
+    getMode: function () { return "lite"; },
+    isAuthorized: function () { return false; },
+    getPayingStatus: function () { return "unknown"; },
+    signature: "",
+    scopePermissions: { avatar: "not_set", public_name: "not_set" }
+  };
+
+  var lbApi = {
+    setScore: function () { return res(true); },
+    getDescription: function (n) {
+      return res({
+        appID: "0", default: true, title: { en: n },
+        description: {
+          invert_sort_order: false,
+          score_format: { options: { decimal_offset: 0 } },
+          type: "numeric"
+        }
+      });
+    },
+    getEntries: function () { return res({ leaderboard: {}, ranges: [], userRank: 0, entries: [] }); },
+    getPlayerEntry: function () {
+      var e = new Error("no entry");
+      e.code = "LEADERBOARD_PLAYER_NOT_PRESENT";
+      return Promise.reject(e);
+    }
+  };
+
+  var base = {
+    environment: {
+      app: { id: "0" },
+      browser: { lang: G.LANG },
+      i18n: { lang: G.LANG, tld: "com" },
+      payload: null
+    },
+    deviceInfo: {
+      type: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
+      isMobile: function () { return /iPhone|iPod|Android/i.test(navigator.userAgent); },
+      isDesktop: function () { return !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent); },
+      isTablet: function () { return /iPad/i.test(navigator.userAgent); },
+      isTV: function () { return false; }
+    },
+    adv: {
+      showFullscreenAdv: function (o) {
+        var c = (o && o.callbacks) || {};
+        setTimeout(function () { try { c.onClose && c.onClose(false); } catch (e) {} }, 0);
+      },
+      showRewardedVideo: function (o) {
+        var c = (o && o.callbacks) || {};
+        setTimeout(function () {
+          try { c.onOpen && c.onOpen(); } catch (e) {}
+          try { c.onRewarded && c.onRewarded(); } catch (e) {}
+          try { c.onClose && c.onClose(); } catch (e) {}
+        }, 0);
+      },
+      showBannerAdv: function () { return res({ stickyAdvIsShowing: false, reason: "adv_is_not_connected" }); },
+      hideBannerAdv: function () { return res({ stickyAdvIsShowing: false }); },
+      getBannerAdvStatus: function () { return res({ stickyAdvIsShowing: false, reason: "adv_is_not_connected" }); }
+    },
+    features: {
+      LoadingAPI: { ready: noop },
+      GameplayAPI: { start: noop, stop: noop },
+      GamesAPI: { getAllGames: function () { return res({ games: [], developerURL: "" }); } }
+    },
+    leaderboards: lbApi,
+    getLeaderboards: function () { return res(lbApi); },
+    getPlayer: function () { return res(playerObj); },
+    getPayments: function () { return Promise.reject(new Error("payments unavailable")); },
+    getStorage: function () { return res(window.localStorage); },
+    getFlags: function () { return res({}); },
+    feedback: {
+      canReview: function () { return res({ value: false, reason: "NO_AUTH" }); },
+      requestReview: function () { return res({ feedbackSent: false }); }
+    },
+    shortcut: {
+      canShowPrompt: function () { return res({ canShow: false }); },
+      showPrompt: function () { return res({ outcome: "dismissed" }); }
+    },
+    screen: {
+      fullscreen: { status: "off", request: function () { return res(true); }, exit: function () { return res(true); } }
+    },
+    auth: { openAuthDialog: function () { return Promise.reject(new Error("no auth")); } },
+    isAvailableMethod: function () { return res(false); },
+    dispatchEvent: function () { return res(true); },
+    on: function () { return noop; },
+    off: function () { return true; },
+    EVENT_HISTORY_BACK: "HISTORY_BACK",
+    EVENT_GAME_API_PAUSE: "game_api_pause",
+    EVENT_GAME_API_RESUME: "game_api_resume"
+  };
+
+  var proxied = new Proxy(base, {
+    get: function (t, p) {
+      if (p === "then" || p === "catch" || p === "finally") return undefined;
+      if (p in t) return t[p];
+      if (typeof p === "symbol") return undefined;
+      return deep();
+    }
+  });
+
+  window.YaGames = { init: function () { return res(proxied); } };
+})();
+</script>
+
+<script>
+window.hideFullScreenButton = "";
+window.ygGameInstance = null;
+window.ysdk = null;
+window.player = null;
+window.payments = null;
+window.initYSDK = false;
+window.initGame = false;
+window.syncInit = false;
+window.isVisibility = true;
+window.isPausedGame = false;
+window.nowFullAdOpen = false;
+window.NO_DATA = "no data";
+window.cloudSaves = window.NO_DATA;
+window.statsSaves = window.NO_DATA;
+window.paymentsData = window.NO_DATA;
+window.environmentData = window.NO_DATA;
+window.playerData = window.NO_DATA;
+
+(function () {
+  var G = window.GAME_FILES;
+  var NO_DATA = window.NO_DATA;
+
+  var container = document.querySelector("#unity-container");
+  var canvas = document.querySelector("#unity-canvas");
+  var loadingCover = document.querySelector("#loading-cover");
+  var progressBarEmpty = document.querySelector("#unity-progress-bar-empty");
+  var progressBarFull = document.querySelector("#unity-progress-bar-full");
+  var spinner = document.querySelector(".spinner");
+
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) container.className = "unity-mobile";
+  loadingCover.style.display = "";
+
+  window.LogStyledMessage = function (message, style) {
+    console.log("%c" + message, style || "color: #FFDF73; background-color: #454545");
+  };
+
+  var brotliMod = null;
+  function GetBrotli() {
+    if (brotliMod) return Promise.resolve(brotliMod);
+    return import(G.BROTLI).then(function (m) {
+      var d = m && m.default;
+      return (d && typeof d.then === "function") ? d : (d || m);
+    }).then(function (m) { brotliMod = m; return m; });
+  }
+
+  function LooksRaw(kind, u) {
+    if (!u || u.length < 8) return false;
+    if (kind === "wasm") return u[0] === 0x00 && u[1] === 0x61 && u[2] === 0x73 && u[3] === 0x6D;
+    if (kind === "data") return u[0] === 0x55 && u[1] === 0x6E && u[2] === 0x69 && u[3] === 0x74;
+    var n = Math.min(u.length, 256), printable = 0;
+    for (var i = 0; i < n; i++) {
+      var c = u[i];
+      if (c === 9 || c === 10 || c === 13 || (c >= 32 && c <= 126)) printable++;
+    }
+    return printable / n > 0.9;
+  }
+
+  function Decode(kind, bytes) {
+    if (LooksRaw(kind, bytes)) return Promise.resolve(bytes);
+    return GetBrotli().then(function (m) {
+      var out = m.decompress(bytes);
+      return (out && out.length) ? out : bytes;
+    }).catch(function () { return bytes; });
+  }
+
+  function FetchBytes(url) {
+    return fetch(url, { cache: "force-cache" }).then(function (r) {
+      if (!r.ok) throw new Error(url + " -> " + r.status);
+      return r.arrayBuffer();
+    }).then(function (b) { return new Uint8Array(b); });
+  }
+
+  function ToBlobUrl(u8) {
+    return URL.createObjectURL(new Blob([u8], { type: "application/octet-stream" }));
+  }
+
+  function FetchSingle(kind, url) {
+    return FetchBytes(url).then(function (u8) { return Decode(kind, u8); }).then(ToBlobUrl);
+  }
+
+  function FetchParts(kind, urls) {
+    var jobs = [];
+    for (var i = 0; i < urls.length; i++) jobs.push(FetchBytes(urls[i]));
+    return Promise.all(jobs).then(function (chunks) {
+      var total = 0, i;
+      for (i = 0; i < chunks.length; i++) total += chunks[i].length;
+      var merged = new Uint8Array(total), off = 0;
+      for (i = 0; i < chunks.length; i++) { merged.set(chunks[i], off); off += chunks[i].length; }
+      return Decode(kind, merged);
+    }).then(ToBlobUrl);
+  }
+
+  var config = null;
+  var loaderReady = false;
+  var filesReady = false;
+  var started = false;
+
+  document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  document.addEventListener("visibilitychange", function () { window.SetVisibility(!document.hidden); });
+  window.addEventListener("blur", function () { window.SetVisibility(false); });
+  window.addEventListener("focus", function () { window.SetVisibility(true); });
+  window.addEventListener("pointerdown", function () { window.FocusGame(); window.SetVisibility(true); });
+  window.addEventListener("resize", function () { window.FocusGame(); });
+  document.addEventListener("fullscreenchange", function () { window.FocusGame(); });
+
+  var oRequestPointerLock = Element.prototype.requestPointerLock;
+  Element.prototype.requestPointerLock = function () {
+    var args = Array.prototype.slice.call(arguments);
+    try {
+      if (!args[0]) args[0] = {};
+      args[0].unadjustedMovement = true;
+      var r = oRequestPointerLock.apply(this, args);
+      if (r && r.catch) r.catch(function () {});
+      return r;
+    } catch (e) {}
+  };
+
+  var oRequestFullscreen = Element.prototype.requestFullscreen;
+  if (oRequestFullscreen) {
+    Element.prototype.requestFullscreen = function () {
+      try {
+        var r = oRequestFullscreen.apply(this, arguments);
+        if (r && r.catch) r.catch(function () {});
+        return r;
+      } catch (e) { return Promise.resolve(); }
+    };
+  }
+
+  window.addEventListener("error", function (ev) {
+    var m = ev && ev.message ? String(ev.message) : "";
+    if (m.indexOf("pointer lock") !== -1 || m.indexOf("Fullscreen") !== -1) ev.preventDefault();
+  }, true);
+
+  window.InstallBlurFocusBlocker = function () {
+    if (!("onblur" in document)) return;
+    if (window.blurFocusHandlersInstalled) return;
+    window.addEventListener("blur", function () {
+      var b = document.createElement("button");
+      b.style.position = "fixed";
+      b.style.top = "0";
+      b.style.left = "0";
+      b.style.width = "100%";
+      b.style.height = "100%";
+      b.style.zIndex = "9999";
+      b.style.backgroundColor = "rgba(0, 0, 0, 0)";
+      b.style.border = "none";
+      b.style.cursor = "default";
+      document.body.appendChild(b);
+      function removeBlocker() {
+        if (b && b.parentNode) b.parentNode.removeChild(b);
+        window.removeEventListener("focus", removeBlocker);
+      }
+      window.addEventListener("focus", removeBlocker);
+    });
+    window.blurFocusHandlersInstalled = true;
+  };
+
+  window.FocusGame = function (checkingPauseStatus) {
+    if (checkingPauseStatus === undefined) checkingPauseStatus = true;
+    if (!canvas) return;
+    requestAnimationFrame(function () {
+      if (checkingPauseStatus && window.isPausedGame) return;
+      var active = document.activeElement;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+      try { canvas.focus({ preventScroll: true }); } catch (e) { try { canvas.focus(); } catch (e2) {} }
+    });
+  };
+
+  window.SetVisibility = function (visibility) {
+    if (window.ysdk !== null && window.initGame === true && window.isVisibility !== visibility) {
+      window.isVisibility = visibility;
+      window.YG2Instance("SetFocusWindowGame", visibility ? "true" : "false");
+    }
+  };
+
+  window.PauseCallback = function () {
+    window.isPausedGame = true;
+    window.YG2Instance("SetPauseGame", "true");
+  };
+
+  window.ResumeCallback = function () {
+    window.isPausedGame = false;
+    window.YG2Instance("SetPauseGame", "false");
+    window.FocusGame(false);
+  };
+
+  window.YG2Instance = function (method, arg) {
+    if (window.ygGameInstance == null) return;
+    function send() {
+      if (!window.ygGameInstance) return;
+      if (arg === undefined) window.ygGameInstance.SendMessage("YG2Instance", method);
+      else window.ygGameInstance.SendMessage("YG2Instance", method, arg);
+    }
+    if (!window.initGame) setTimeout(send, 100);
+    else send();
+  };
+
+  window.IsLocalHost = function () {
+    try {
+      if (window.top !== window) return false;
+      var host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1" || host.slice(-6) === ".local") return true;
+    } catch (e) { return false; }
+    return false;
+  };
+
+  window.StartUnityInstance = function () {
+    if (started || !loaderReady || !filesReady || !config) return;
+    if (typeof createUnityInstance !== "function") return;
+    started = true;
+    createUnityInstance(canvas, config, function (progress) {
+      spinner.style.display = "none";
+      progressBarEmpty.style.display = "";
+      var adjusted = Math.max(progress, 0.05);
+      progressBarFull.style.width = (100 * adjusted) + "%";
+    }).then(function (unityInstance) {
+      window.ygGameInstance = unityInstance;
+      loadingCover.style.background = "";
+      loadingCover.style.display = "none";
+      window.FocusGame();
+      if (window.initYSDK) unityInstance.SendMessage("YG2Instance", "InitSDKComplete");
+    }).catch(function (message) {
+      console.error(message);
+    });
+  };
+  window.StartUnityInstance_IfUnloaded = window.StartUnityInstance;
+
+  window.InitGame = function () {
+    window.initGame = true;
+    setTimeout(function () {
+      if (window.isPausedGame === true) window.YG2Instance("SetPauseGame", "true");
+    }, 100);
+  };
+
+  window.SaveCloud = function (jsonData, flush) {
+    if (window.player == null) return;
+    try { window.player.setData({ saves: [jsonData] }, flush); } catch (e) {}
+  };
+
+  window.LoadCloud = function () {
+    return new Promise(function (resolve) {
+      function Final(r) {
+        window.cloudSaves = r;
+        window.YG2Instance("SetLoadSaves", r);
+        resolve(r);
+      }
+      if (window.ysdk == null || window.player == null) return Final(NO_DATA);
+      try {
+        window.player.getData(["saves"]).then(function (data) {
+          if (data && data.saves) Final(JSON.stringify(data.saves));
+          else Final(NO_DATA);
+        }).catch(function () { Final(NO_DATA); });
+      } catch (e) { Final(NO_DATA); }
+    });
+  };
+
+  window.RewardedAdvShow = function (id) {
+    try {
+      window.ysdk.adv.showRewardedVideo({
+        callbacks: {
+          onOpen: function () { window.YG2Instance("OpenRewardedAdv"); },
+          onClose: function () { window.YG2Instance("CloseRewardedAdv"); window.FocusGame(); },
+          onRewarded: function () { window.YG2Instance("RewardAdv", id); },
+          onError: function () { window.YG2Instance("ErrorRewardedAdv"); }
+        }
+      });
+    } catch (e) {}
+  };
+
+  window.GetStats = function () {
+    return new Promise(function (resolve) {
+      function Final(r) {
+        window.statsSaves = r;
+        window.YG2Instance("ReceiveStats", r);
+        resolve(r);
+      }
+      if (window.ysdk == null || window.player == null) return Final(NO_DATA);
+      try {
+        window.player.getStats().then(function (s) { Final(JSON.stringify(s)); })
+          .catch(function () { Final(NO_DATA); });
+      } catch (e) { Final(NO_DATA); }
+    });
+  };
+
+  window.SetStats = function (jsonStats) {
+    if (window.ysdk == null || window.player == null) return;
+    try { window.player.setStats(JSON.parse(jsonStats)); } catch (e) {}
+  };
+
+  window.InitPayments = function () {
+    return new Promise(function (resolve) {
+      function Final(r) {
+        window.paymentsData = r;
+        window.YG2Instance("PaymentsEntries", r);
+        resolve(r);
+      }
+      try {
+        if (window.ysdk == null) return Final(NO_DATA);
+        window.ysdk.getPayments().then(function (p) {
+          window.payments = p;
+          p.getCatalog().then(function (products) {
+            p.getPurchases().then(function (purchases) {
+              var productID = [], title = [], description = [], imageURI = [], price = [];
+              var priceValue = [], priceCurrencyCode = [], currencyImageURL = [], consumed = [];
+              for (var i = 0; i < products.length; i++) {
+                productID[i] = products[i].id;
+                title[i] = products[i].title;
+                description[i] = products[i].description;
+                imageURI[i] = products[i].imageURI;
+                price[i] = products[i].price;
+                priceValue[i] = products[i].priceValue;
+                priceCurrencyCode[i] = products[i].priceCurrencyCode;
+                currencyImageURL[i] = products[i].getPriceCurrencyImage("medium");
+                consumed[i] = true;
+                for (var j = 0; j < purchases.length; j++) {
+                  if (purchases[j].productID === productID[i]) { consumed[i] = false; break; }
+                }
+              }
+              Final(JSON.stringify({
+                id: productID, title: title, description: description, imageURI: imageURI,
+                price: price, priceValue: priceValue, priceCurrencyCode: priceCurrencyCode,
+                currencyImageURL: currencyImageURL, consumed: consumed,
+                language: window.ysdk.environment.i18n.lang
+              }));
+            }).catch(function () { Final(NO_DATA); });
+          }).catch(function () { Final(NO_DATA); });
+        }).catch(function () { Final(NO_DATA); });
+      } catch (e) { Final(NO_DATA); }
+    });
+  };
+
+  window.BuyPayments = function (id) {
+    try {
+      if (window.payments != null) {
+        window.payments.purchase(id).then(function () {
+          window.ConsumePurchase(id, true);
+          window.FocusGame();
+        }).catch(function () {
+          window.YG2Instance("OnPurchaseFailed", id);
+          window.FocusGame();
+        });
+      } else {
+        window.YG2Instance("OnPurchaseFailed", id);
+      }
+    } catch (e) {
+      window.YG2Instance("OnPurchaseFailed", id);
+      window.FocusGame();
+    }
+  };
+
+  window.ConsumePurchase = function (id, onPurchaseSuccess) {
+    try {
+      if (window.payments == null) return;
+      window.payments.getPurchases().then(function (purchases) {
+        for (var i = 0; i < purchases.length; i++) {
+          if (purchases[i].productID === id) {
+            window.payments.consumePurchase(purchases[i].purchaseToken);
+            if (onPurchaseSuccess) window.YG2Instance("OnPurchaseSuccess", id);
+          }
+        }
+      });
+    } catch (e) {}
+  };
+
+  window.ConsumePurchases = function (onPurchaseSuccess) {
+    try {
+      if (window.payments == null) return;
+      window.payments.getPurchases().then(function (purchases) {
+        for (var i = 0; i < purchases.length; i++) {
+          window.payments.consumePurchase(purchases[i].purchaseToken);
+          if (onPurchaseSuccess) window.YG2Instance("OnPurchaseSuccess", purchases[i].productID);
+        }
+      });
+    } catch (e) {}
+  };
+
+  window.SetLeaderboard = function (name, score, extraData) {
+    if (!window.ysdk) return;
+    try { window.ysdk.leaderboards.setScore(name, score, extraData); } catch (e) {}
+  };
+
+  window.GetLeaderboard = function (nameLB, quantityTop, quantityAround, photoSize, auth) {
+    if (!window.ysdk) return;
+    var jsonEntries = {
+      technoName: "", isDefault: false, isInvertSortOrder: false, decimalOffset: 0, type: ""
+    };
+    window.ysdk.leaderboards.getDescription(nameLB)
+      .then(function (r) {
+        jsonEntries.technoName = nameLB;
+        jsonEntries.isDefault = r.default;
+        jsonEntries.isInvertSortOrder = r.description.invert_sort_order;
+        jsonEntries.decimalOffset = r.description.score_format.options.decimal_offset;
+        jsonEntries.type = r.description.type;
+        return window.ysdk.leaderboards.getEntries(nameLB, {
+          quantityTop: quantityTop, includeUser: auth, quantityAround: quantityAround
+        });
+      })
+      .then(function (r) {
+        var jsonPlayers = window.EntriesLB(r, photoSize);
+        var combined = {}, k;
+        for (k in jsonEntries) combined[k] = jsonEntries[k];
+        for (k in jsonPlayers) combined[k] = jsonPlayers[k];
+        window.YG2Instance("LeaderboardEntries", JSON.stringify(combined));
+      })
+      .catch(function () {});
+  };
+
+  window.EntriesLB = function (r, photoSize) {
+    var text = "";
+    var count = r.entries.length;
+    var ranks = new Array(count), photos = new Array(count), names = new Array(count);
+    var scores = new Array(count), uniqueIDs = new Array(count), extraDataArray = new Array(count);
+
+    for (var i = 0; i < count; i++) {
+      ranks[i] = r.entries[i].rank;
+      scores[i] = r.entries[i].score;
+      uniqueIDs[i] = r.entries[i].player.uniqueID;
+      photos[i] = r.entries[i].player.getAvatarSrc(photoSize);
+
+      if (r.entries[i].extraData === "" || r.entries[i].extraData == null) extraDataArray[i] = NO_DATA;
+      else extraDataArray[i] = r.entries[i].extraData;
+
+      if (r.entries[i].player.scopePermissions.public_name !== "allow") names[i] = "anonymous";
+      else names[i] = r.entries[i].player.publicName;
+
+      text += ranks[i] + ". " + names[i] + ": " + scores[i] + "\n";
+    }
+    if (count === 0) text = "no data";
+
+    return {
+      entries: text, ranks: ranks, photos: photos, names: names,
+      scores: scores, uniqueIDs: uniqueIDs, extraDataArray: extraDataArray
+    };
+  };
+
+  window.InterAdvShow = function () {
+    try {
+      if (window.ysdk == null) return;
+      if (window.nowFullAdOpen === true) return;
+      window.ysdk.adv.showFullscreenAdv({
+        callbacks: {
+          onOpen: function () {
+            window.nowFullAdOpen = true;
+            if (window.initGame === true) window.YG2Instance("OpenInterAdv");
+          },
+          onClose: function (wasShown) {
+            window.nowFullAdOpen = false;
+            if (window.initGame === true) window.YG2Instance("CloseInterAdv", wasShown ? "true" : "false");
+            window.FocusGame();
+          },
+          onError: function () {
+            window.nowFullAdOpen = false;
+            window.YG2Instance("ErrorInterAdv");
+            window.FocusGame();
+          }
+        }
+      });
+    } catch (e) {}
+  };
+
+  window.RequestingEnvironmentData = function () {
+    return new Promise(function (resolve) {
+      function Final(r) {
+        window.environmentData = r;
+        window.YG2Instance("SetEnvirData", r);
+        resolve(r);
+      }
+      if (window.ysdk == null) return Final(NO_DATA);
+      try {
+        var ua = navigator.userAgent, browser;
+        if (ua.indexOf("YaBrowser") !== -1 || ua.indexOf("YaSearchBrowser") !== -1) browser = "Yandex";
+        else if (ua.indexOf("Opera") !== -1 || ua.indexOf("OPR") !== -1) browser = "Opera";
+        else if (ua.indexOf("Firefox") !== -1) browser = "Firefox";
+        else if (ua.indexOf("MSIE") !== -1) browser = "IE";
+        else if (ua.indexOf("Edge") !== -1) browser = "Edge";
+        else if (ua.indexOf("Chrome") !== -1) browser = "Chrome";
+        else if (ua.indexOf("Safari") !== -1) browser = "Safari";
+        else browser = "Other";
+
+        Final(JSON.stringify({
+          language: window.ysdk.environment.i18n.lang,
+          domain: window.ysdk.environment.i18n.tld,
+          deviceType: window.ysdk.deviceInfo.type,
+          isMobile: window.ysdk.deviceInfo.isMobile(),
+          isDesktop: window.ysdk.deviceInfo.isDesktop(),
+          isTablet: window.ysdk.deviceInfo.isTablet(),
+          isTV: window.ysdk.deviceInfo.isTV(),
+          appID: window.ysdk.environment.app.id,
+          browserLang: window.ysdk.environment.browser.lang,
+          payload: window.ysdk.environment.payload,
+          platform: navigator.platform,
+          browser: browser
+        }));
+      } catch (e) { Final(NO_DATA); }
+    });
+  };
+
+  window.NotAuthorized = function (hasPlayer) {
+    return JSON.stringify({
+      playerAuth: "rejected",
+      playerName: "unauthorized",
+      playerId: (hasPlayer && window.player) ? window.player.getUniqueID() : "unauthorized",
+      playerPhoto: "no data",
+      payingStatus: "unknown"
+    });
+  };
+
+  window.InitPlayer = function () {
+    function Final(r) {
+      window.playerData = r;
+      window.YG2Instance("SetAuth", r);
+      return r;
+    }
+    if (!window.ysdk) return Promise.resolve(Final(window.NotAuthorized(false)));
+    return window.ysdk.getPlayer().then(function (p) {
+      window.player = p;
+      if (!p || !p.isAuthorized()) return Final(window.NotAuthorized(true));
+      return Final(JSON.stringify({
+        playerAuth: "resolved",
+        playerName: p.getName(),
+        playerId: p.getUniqueID(),
+        playerPhoto: p.getPhoto("medium"),
+        payingStatus: p.getPayingStatus()
+      }));
+    }).catch(function () {
+      return Final(window.NotAuthorized(false));
+    });
+  };
+
+  window.OpenAuthDialog = function () {
+    if (!window.ysdk) return Promise.resolve();
+    return window.ysdk.getPlayer().then(function (p) {
+      window.player = p;
+      if (p.isAuthorized()) {
+        return window.InitPlayer().then(function () { window.YG2Instance("LoggedIn"); });
+      }
+      return window.ysdk.auth.openAuthDialog().then(function () {
+        return window.ysdk.getPlayer().then(function (p2) {
+          window.player = p2;
+          return window.InitPlayer().then(function () {
+            if (p2.isAuthorized()) window.YG2Instance("LoggedIn");
+          });
+        });
+      }).catch(function () { return window.InitPlayer(); });
+    }).catch(function () {
+      window.player = null;
+      return window.InitPlayer();
+    });
+  };
+
+  window.InitYSDK = function () {
+    return window.YaGames.init().then(function (sdk) {
+      window.ysdk = sdk;
+      sdk.on("game_api_pause", window.PauseCallback);
+      sdk.on("game_api_resume", window.ResumeCallback);
+      return window.RequestingEnvironmentData();
+    }).then(function () {
+      return window.InitPlayer();
+    }).then(function () {
+      return window.LoadCloud();
+    }).then(function () {
+      return window.GetStats();
+    }).then(function () {
+      return window.InitPayments();
+    }).then(function () {
+      window.initYSDK = true;
+      if (window.ygGameInstance != null) window.ygGameInstance.SendMessage("YG2Instance", "InitSDKComplete");
+    }).catch(function (e) {
+      console.error("CRASH Initialization SDK: ", e);
+      window.initYSDK = true;
+    });
+  };
+
+  Promise.all([
+    FetchSingle("js", G.FRAMEWORK),
+    FetchSingle("wasm", G.WASM),
+    FetchParts("data", G.DATA_PARTS)
+  ]).then(function (u) {
+    config = {
+      dataUrl: u[2],
+      frameworkUrl: u[0],
+      codeUrl: u[1],
+      streamingAssetsUrl: G.STREAMING,
+      companyName: "Nepochat",
+      productName: "ABYSS_1.1",
+      productVersion: "1.1"
+    };
+    filesReady = true;
+    window.StartUnityInstance();
+  }).catch(function (e) {
+    console.error("asset load failed", e);
+  });
+
+  var script = document.createElement("script");
+  script.src = G.LOADER;
+  script.onload = function () {
+    loaderReady = true;
+    window.InstallBlurFocusBlocker();
+    window.InitYSDK();
+    window.StartUnityInstance();
+  };
+  script.onerror = function () { console.error("loader failed"); };
+  document.body.appendChild(script);
+})();
+</script>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<style>
+#modBtn{position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:8px 14px;background:#000;color:#0f0;border:1px solid #0f0;font:bold 13px monospace;cursor:pointer}
+#modBtn:hover{background:#0f0;color:#000}
+#modPanel{position:fixed;right:10px;bottom:50px;z-index:2147483647;display:none;width:270px;max-height:82vh;overflow:auto;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace}
+#modPanel.open{display:block}
+#modPanel .head{display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid #0f0;font-weight:bold}
+#modPanel .head span{cursor:pointer}
+#modPanel .body{padding:8px}
+#modPanel .sec{margin:8px 0 2px;padding:0 2px;color:#9f9;font-weight:bold;font-size:10px;letter-spacing:1px}
+#modPanel button{display:block;width:100%;margin:5px 0;padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace;cursor:pointer}
+#modPanel button:hover{background:#0f0;color:#000}
+#modNote{margin-top:6px;border-top:1px solid #0f0;padding-top:5px;min-height:12px;overflow-wrap:anywhere}
+#modNotice{position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:250px;padding:10px 12px;background:#000;color:#0f0;border:1px solid #0f0;border-radius:6px;font:bold 12px monospace;box-shadow:0 0 14px rgba(0,255,0,.35);cursor:pointer;opacity:0;transform:scale(.4);pointer-events:none}
+#modNotice.center{left:50%;top:50%;bottom:auto;max-width:340px;padding:16px 20px;border-width:2px;font:bold 16px monospace;text-align:center;transform:translate(-50%,-50%) scale(.4)}
+#modNotice.show{animation:modPop .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite;pointer-events:auto}
+#modNotice.center.show{animation:modPopC .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite}
+#modNotice.hide{animation:modOut .35s ease forwards;pointer-events:none}
+#modNotice.center.hide{animation:modOutC .35s ease forwards}
+#modNotice span{display:block;margin-top:4px;color:#9f9;font-weight:normal;font-size:10.5px}
+#modNotice.center span{margin-top:6px;font-size:11.5px}
+@keyframes modPop{0%{opacity:0;transform:scale(.4) translateY(24px)}60%{opacity:1;transform:scale(1.1) translateY(-6px)}80%{transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes modOut{to{opacity:0;transform:scale(.7) translateY(10px)}}
+@keyframes modPopC{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}60%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}80%{transform:translate(-50%,-50%) scale(.96)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes modOutC{to{opacity:0;transform:translate(-50%,-50%) scale(.7)}}
+@keyframes modPulse{0%,100%{box-shadow:0 0 12px rgba(0,255,0,.35)}50%{box-shadow:0 0 22px rgba(255,45,149,.8)}}
+</style>
+<button id="modBtn" type="button">MODS</button>
+<div id="modPanel">
+<div class="head">RAGDOLL FREEFALL 2 MODS <span id="modClose">X</span></div>
+<div class="body">
+<div class="sec">CHEATS</div>
+<button id="modMoney" type="button">EDIT MONEY</button>
+<button id="modGold" type="button">EDIT GOLD</button>
+<button id="modSkins" type="button">UNLOCK ALL SKINS</button>
+<button id="modUpg" type="button">MAX UPGRADES</button>
+<button id="modRuin" type="button">RUIN THE FUN</button>
+<div class="sec">TOOLS</div>
+<button id="modClean" type="button">CLEAN JUNK KEYS</button>
+<button id="modWipe" type="button">WIPE SAVE</button>
+<div id="modNote">ready</div>
+</div>
+</div>
+<div id="modNotice">MOD PANEL AVAILABLE<span>click MODS (bottom right) to open</span></div>
+<script>
+(function(){
+var noteEl=document.getElementById("modNote");
+function note(s){noteEl.textContent=s;}
+var panel=document.getElementById("modPanel");
+var notice=document.getElementById("modNotice");
+document.getElementById("modBtn").onclick=function(){hideNotice();panel.classList.toggle("open");};
+document.getElementById("modClose").onclick=function(){panel.classList.remove("open");};
+window.addEventListener("keydown",function(e){if(e.key==="`"){panel.classList.toggle("open");}});
+function req(r){return new Promise(function(res,rej){r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function openDB(n){return new Promise(function(res,rej){var r=indexedDB.open(n);r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function isUPP(b){if(!b||b.length<16)return false;var m="";for(var i=0;i<8;i++)m+=String.fromCharCode(b[i]);return m==="UnityPrf";}
+function parseUPP(bytes){var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);var dec=new TextDecoder();var off=16;var entries=[];function rs(){if(off>=bytes.length)return null;var mk=bytes[off++];var len;if(mk<128)len=mk;else if(mk===128){if(off+4>bytes.length)return null;len=dv.getInt32(off,true);off+=4;}else return null;if(len<0||off+len>bytes.length)return null;var s=dec.decode(bytes.subarray(off,off+len));off+=len;return s;}while(off<bytes.length){var k=rs();if(k===null||off>=bytes.length)break;var mk=bytes[off++];if(mk<128||mk===128){off--;var v=rs();if(v===null)break;entries.push({key:k,type:"string",value:v});}else if(mk===0xFD){if(off+4>bytes.length)break;entries.push({key:k,type:"float",value:dv.getFloat32(off,true)});off+=4;}else if(mk===0xFE){if(off+4>bytes.length)break;entries.push({key:k,type:"int",value:dv.getInt32(off,true)});off+=4;}else break;}return entries;}
+function encodeUPP(header,entries){var enc=new TextEncoder();var parts=[];function ps(s){var b=enc.encode(String(s));if(b.length<128)parts.push(new Uint8Array([b.length]));else{var h=new Uint8Array(5);h[0]=128;new DataView(h.buffer).setInt32(1,b.length,true);parts.push(h);}parts.push(b);}parts.push(header);entries.forEach(function(en){ps(en.key);if(en.type==="int"){var ib=new Uint8Array(5);ib[0]=0xFE;new DataView(ib.buffer).setInt32(1,en.value|0,true);parts.push(ib);}else if(en.type==="float"){var fb=new Uint8Array(5);fb[0]=0xFD;new DataView(fb.buffer).setFloat32(1,Number(en.value)||0,true);parts.push(fb);}else ps(en.value);});var t=0;parts.forEach(function(p){t+=p.length;});var out=new Uint8Array(t);var o=0;parts.forEach(function(p){out.set(p,o);o+=p.length;});return out;}
+var prefsSources=[];
+async function scanPrefs(){prefsSources=[];var names=["/idbfs"];try{if(indexedDB.databases){var dbs=await indexedDB.databases();dbs.forEach(function(d){if(d.name&&d.name.indexOf("idbfs")>=0&&names.indexOf(d.name)<0)names.push(d.name);});}}catch(e){}for(var ni=0;ni<names.length;ni++){try{var db=await openDB(names[ni]);if(!db.objectStoreNames.contains("FILE_DATA")){db.close();continue;}var st=db.transaction("FILE_DATA","readonly").objectStore("FILE_DATA");var keys=await req(st.getAllKeys());var vals=await req(st.getAll());for(var i=0;i<keys.length;i++){var v=vals[i];if(!v||!v.contents)continue;var b;try{b=v.contents instanceof Uint8Array?v.contents:new Uint8Array(v.contents);}catch(e){continue;}if(!isUPP(b))continue;var es=parseUPP(b);if(es)prefsSources.push({db:names[ni],key:keys[i],rec:v,header:b.slice(0,16),entries:es});}db.close();}catch(e){}}return prefsSources.length>0;}
+async function applyPrefs(){for(var s=0;s<prefsSources.length;s++){var ps=prefsSources[s];try{var db=await openDB(ps.db);var tx=db.transaction("FILE_DATA","readwrite");tx.objectStore("FILE_DATA").put({timestamp:new Date(),mode:ps.rec&&ps.rec.mode?ps.rec.mode:33206,contents:encodeUPP(ps.header,ps.entries)},ps.key);await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=function(){rej(tx.error);};});db.close();}catch(e){}}}
+function setEntry(src,key,value){for(var i=0;i<src.entries.length;i++){if(src.entries[i].key===key){if(src.entries[i].type==="string")src.entries[i].value=String(value);else src.entries[i].value=Number(value);return;}}src.entries.push({key:key,type:"int",value:value});}
+function isUpgKey(k){return /upg|lvl|level/i.test(k)&&!/audio|volume|quality|lod|graphic|detail/i.test(k);}
+var UPG_CANDIDATES=(function(){
+var parts=["ALL","ARM","ARMS","CHEST","HIP","HAND","HANDS","FOOT","FEET","HEAD","TORSO","LEG","LEGS","SPINE","NECK","PELVIS","SHOULDER","KNEE","ELBOW"];
+var pats=["BODY_UPG_%_LVL","BODY_UPG_%","%_LEVEL","LEVEL_%","GROUP_LEVEL_%","UPG_%_LVL","%_UPG_LVL","BODY_UPGRADE_%","UPGRADE_%","%_UPG"];
+var keys=[];
+parts.forEach(function(p){pats.forEach(function(f){keys.push(f.replace("%",p));});});
+var numPats=["BODY_UPG_%_LVL","BODY_UPG_%","GROUP_LEVEL_%","LEVEL_%","UPG_%_LVL","%_LEVEL","UPGRADE_%","%_UPG_LVL","UPGRADE_LEVEL_%","GROUP_%_LEVEL"];
+for(var n=0;n<=60;n++){numPats.forEach(function(f){keys.push(f.replace("%",n));});}
+var out=[];
+keys.forEach(function(k){out.push(k);var low=k.toLowerCase();if(out.indexOf(low)<0)out.push(low);});
+return out;
+})();
+var UPG_CAND_SET={};
+UPG_CANDIDATES.forEach(function(k){UPG_CAND_SET[k]=1;});
+function learnedKeys(){
+var o={};
+try{var raw=localStorage.getItem("ragdoll_upg_keys");if(raw)JSON.parse(raw).forEach(function(k){if(!UPG_CAND_SET[k])o[k]=1;});}catch(e){}
+o["BODY_UPG_ALL_CRYSTAL_LVL"]=1;
+return o;
+}
+function allSeedKeys(){return Object.keys(learnedKeys());}
+function localJsonMaxLevels(value){
+function walk(o){
+var did=false;
+for(var key in o){
+if(!o.hasOwnProperty(key))continue;
+var v=o[key];
+if(isUpgKey(key)&&typeof v==="number"){o[key]=value;did=true;}
+else if(v&&typeof v==="object"){if(walk(v))did=true;}
+}
+return did;
+}
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(o===null||typeof o!=="object")continue;
+if(walk(o))localStorage.setItem(k,JSON.stringify(o));
+}
+}catch(e){}
+}
+function localJsonSet(names,value){
+function walk(o){
+var did=false;
+for(var key in o){
+if(!o.hasOwnProperty(key))continue;
+var v=o[key];
+if(names.indexOf(key.toLowerCase())>=0&&typeof v==="number"){o[key]=value;did=true;}
+else if(v&&typeof v==="object"){if(walk(v))did=true;}
+}
+return did;
+}
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(o===null||typeof o!=="object")continue;
+if(walk(o))localStorage.setItem(k,JSON.stringify(o));
+}
+}catch(e){}
+}
+function seedLearnedKeys(value){
+var keys=allSeedKeys();
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(o===null||typeof o!=="object")continue;
+var changed=false;
+keys.forEach(function(key){
+if(!(key in o)){o[key]=value;changed=true;}
+else if(typeof o[key]==="number"&&o[key]<1){o[key]=value;changed=true;}
+});
+if(changed)localStorage.setItem(k,JSON.stringify(o));
+}
+}catch(e){}
+}
+function learnUpgradeKeys(){
+var learned=learnedKeys();
+function walk(o){
+for(var key in o){
+if(!o.hasOwnProperty(key))continue;
+if(isUpgKey(key)&&!UPG_CAND_SET[key]&&typeof o[key]==="number")learned[key]=1;
+else if(o[key]&&typeof o[key]==="object")walk(o[key]);
+}
+}
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(!o||typeof o!=="object")continue;
+walk(o);
+}
+}catch(e){}
+prefsSources.forEach(function(src){
+src.entries.forEach(function(en){if(isUpgKey(en.key)&&!UPG_CAND_SET[en.key])learned[en.key]=1;});
+});
+try{localStorage.setItem("ragdoll_upg_keys",JSON.stringify(Object.keys(learned)));}catch(e){}
+}
+function cleanJunkKeys(){
+var keep=learnedKeys();
+var cand={};
+UPG_CANDIDATES.forEach(function(k){cand[k]=1;});
+var removed=0;
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(!o||typeof o!=="object")continue;
+var changed=false;
+function walk(obj){
+for(var key in obj){
+if(!obj.hasOwnProperty(key))continue;
+var v=obj[key];
+if(cand[key]&&!keep[key]){delete obj[key];changed=true;removed++;}
+else if(v&&typeof v==="object")walk(v);
+}
+}
+walk(o);
+if(changed)localStorage.setItem(k,JSON.stringify(o));
+}
+}catch(e){}
+if(prefsSources.length){
+prefsSources.forEach(function(src){
+var before=src.entries.length;
+src.entries=src.entries.filter(function(en){return !(cand[en.key]&&!keep[en.key]);});
+removed+=before-src.entries.length;
+});
+return applyPrefs().then(function(){return removed;});
+}
+return Promise.resolve(removed);
+}
+function clampLocalUpgrades(){
+function walk(o){
+var did=false;
+for(var key in o){
+if(!o.hasOwnProperty(key))continue;
+var v=o[key];
+if(isUpgKey(key)&&typeof v==="number"){if(v<1){o[key]=1;did=true;}}
+else if(v&&typeof v==="object"){if(walk(v))did=true;}
+}
+return did;
+}
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(o===null||typeof o!=="object")continue;
+if(walk(o))localStorage.setItem(k,JSON.stringify(o));
+}
+}catch(e){}
+}
+async function clampPrefsUpgrades(){
+await scanPrefs();
+if(!prefsSources.length)return;
+prefsSources.forEach(function(src){
+src.entries.forEach(function(en){
+if(isUpgKey(en.key)){
+var n=en.type==="string"?parseInt(en.value,10):en.value;
+if(isNaN(n)||n<1){if(en.type==="string")en.value="1";else en.value=1;}
+}
+});
+});
+await applyPrefs();
+}
+function countExistingUpgrades(){
+var n=0;
+function walk(obj){
+for(var key in obj){
+if(!obj.hasOwnProperty(key))continue;
+var v=obj[key];
+if(isUpgKey(key)&&typeof v==="number"&&v>=1)n++;
+else if(v&&typeof v==="object")walk(v);
+}
+}
+try{
+for(var i=0;i<localStorage.length;i++){
+var k=localStorage.key(i);
+if(k==="ragdoll_upg_keys")continue;
+var raw=localStorage.getItem(k);
+if(!raw)continue;
+var o;
+try{o=JSON.parse(raw);}catch(e){continue;}
+if(!o||typeof o!=="object")continue;
+walk(o);
+}
+}catch(e){}
+return n;
+}
+var UPG_MAX=100000000;
+async function maxUpgrades(){
+var existing=countExistingUpgrades();
+await scanPrefs();
+prefsSources.forEach(function(src){
+src.entries.forEach(function(en){
+if(isUpgKey(en.key)){
+var num=en.type==="string"?parseInt(en.value,10):en.value;
+if(!isNaN(num)&&num>=1)existing++;
+}
+});
+});
+learnUpgradeKeys();
+var learned=allSeedKeys().filter(function(k){return k!=="BODY_UPG_ALL_CRYSTAL_LVL";});
+if(existing===0&&learned.length===0)return 0;
+localJsonMaxLevels(UPG_MAX);
+await cleanJunkKeys();
+seedLearnedKeys(UPG_MAX);
+if(prefsSources.length){
+prefsSources.forEach(function(src){
+src.entries.forEach(function(en){if(isUpgKey(en.key)){if(en.type==="string")en.value=String(UPG_MAX);else en.value=UPG_MAX;}});
+allSeedKeys().forEach(function(k){setEntry(src,k,UPG_MAX);});
+});
+await applyPrefs();
+}
+clampLocalUpgrades();
+await clampPrefsUpgrades();
+return 1;
+}
+async function applyCheats(prefsKeys,localNames,value,label){
+var done=0;
+localJsonSet(localNames,value);
+done+=1;
+await scanPrefs();
+if(prefsSources.length){
+prefsSources.forEach(function(src){prefsKeys.forEach(function(k){setEntry(src,k,value);});});
+await applyPrefs();
+}
+if(done){note(label+" set to "+value+" - reloading");setTimeout(function(){location.reload();},700);}
+else{note("couldn't find the save value - play one run, then try again");}
+}
+document.getElementById("modMoney").onclick=function(){
+var v=prompt("How much money do you want?");
+if(v===null)return;
+var n=parseInt(v,10);
+if(isNaN(n)){note("enter a number");return;}
+applyCheats(["Coins","coins","Money","money","KEY_COINS","BANK_COINS","LAST_COINS_KEY","Balance","balance"],["coins","coin","money","balance","currency"],n,"money");
+};
+document.getElementById("modGold").onclick=function(){
+var v=prompt("How much gold do you want?");
+if(v===null)return;
+var n=parseInt(v,10);
+if(isNaN(n)){note("enter a number");return;}
+applyCheats(["Crystals","crystals","Gold","gold","KEY_CRYSTALS","BANK_CRYSTALS","LAST_RECORD_CRYSTALS_KEY","Gems","gems"],["gold","crystals","crystal","gems","gem","diamonds","diamond"],n,"gold");
+};
+document.getElementById("modSkins").onclick=function(){
+localJsonSet(["owned_skins_mask_a","owned_skins_mask_b","owned_skins"],2147483647);
+scanPrefs().then(function(found){
+if(found){prefsSources.forEach(function(src){setEntry(src,"OWNED_SKINS_MASK_A",2147483647);setEntry(src,"OWNED_SKINS_MASK_B",2147483647);setEntry(src,"OWNED_SKINS",9999);});return applyPrefs();}
+}).then(function(){note("all skins unlocked - reloading");setTimeout(function(){location.reload();},700);}).catch(function(){note("all skins unlocked - reloading");setTimeout(function(){location.reload();},700);});
+};
+document.getElementById("modUpg").onclick=function(){
+note("checking upgrades...");
+maxUpgrades().then(function(r){
+if(r===0){note("buy 1 of every upgrade first");popup("NOTE","Before clicking MAX UPGRADES you have to buy 1 of every upgrade");return;}
+note("ALL UPGRADES MAXED - reloading");
+setTimeout(function(){location.reload();},700);
+}).catch(function(e){note("failed: "+e.message);});
+};
+document.getElementById("modRuin").onclick=function(){
+localJsonSet(["coins","coin","money","balance","currency","gold","crystals","crystal","gems","gem","diamonds","diamond"],999999999);
+localJsonSet(["owned_skins_mask_a","owned_skins_mask_b","owned_skins"],2147483647);
+scanPrefs().then(function(found){
+if(found)learnUpgradeKeys();
+return cleanJunkKeys();
+}).then(function(){
+seedLearnedKeys(UPG_MAX);
+if(prefsSources.length){
+prefsSources.forEach(function(src){
+["Coins","coins","Money","money","KEY_COINS","BANK_COINS","Crystals","crystals","Gold","gold","KEY_CRYSTALS","BANK_CRYSTALS"].forEach(function(k){setEntry(src,k,999999999);});
+["OWNED_SKINS_MASK_A","OWNED_SKINS_MASK_B"].forEach(function(k){setEntry(src,k,2147483647);});
+setEntry(src,"OWNED_SKINS",9999);
+setEntry(src,"SPUSK_TUTORIAL_STAGE_V1",99);
+src.entries.forEach(function(en){if(isUpgKey(en.key)){if(en.type==="string")en.value=String(UPG_MAX);else en.value=UPG_MAX;}});
+allSeedKeys().forEach(function(k){setEntry(src,k,UPG_MAX);});
+});
+return applyPrefs();
+}
+clampLocalUpgrades();
+return clampPrefsUpgrades();
+}).then(function(){note("FUN RUINED - everything maxed!");setTimeout(function(){location.reload();},700);}).catch(function(){note("FUN RUINED - everything maxed!");setTimeout(function(){location.reload();},700);});
+};
+document.getElementById("modClean").onclick=function(){
+note("cleaning junk keys...");
+scanPrefs().then(function(found){
+if(found)learnUpgradeKeys();
+return cleanJunkKeys();
+}).then(function(n){note("cleaned "+n+" junk keys - reloading");setTimeout(function(){location.reload();},700);}).catch(function(){note("cleaned - reloading");setTimeout(function(){location.reload();},700);});
+};
+document.getElementById("modWipe").onclick=function(){
+if(!confirm("Wipe the save and reload?"))return;
+try{localStorage.clear();}catch(e){}
+try{sessionStorage.clear();}catch(e){}
+try{if(indexedDB.databases){indexedDB.databases().then(function(dbs){dbs.forEach(function(d){if(d.name)indexedDB.deleteDatabase(d.name);});location.reload();});return;}}catch(e){}
+location.reload();
+};
+function hideNotice(){notice.classList.remove("show");notice.classList.add("hide");setTimeout(function(){notice.classList.remove("hide");notice.classList.remove("center");},400);}
+var nAudio=null,played=false,noticeTimer=null;
+function sound(){if(played||!notice.classList.contains("show"))return;try{var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;if(!nAudio||nAudio.state==="closed")nAudio=new AC();var go=function(){if(played||nAudio.state!=="running")return;played=true;var t=nAudio.currentTime;[880,1174.66].forEach(function(f,i){var o=nAudio.createOscillator(),g=nAudio.createGain();o.type="sine";o.frequency.setValueAtTime(f,t+i*.09);g.gain.setValueAtTime(.0001,t+i*.09);g.gain.exponentialRampToValueAtTime(.09,t+i*.09+.02);g.gain.exponentialRampToValueAtTime(.0001,t+i*.09+.35);o.connect(g).connect(nAudio.destination);o.start(t+i*.09);o.stop(t+i*.09+.4);});};if(nAudio.state==="suspended")nAudio.resume().then(go).catch(function(){});else go();}catch(e){}}
+function showNotice(dur){notice.classList.add("show");sound();window.addEventListener("pointerdown",sound,{once:true});window.addEventListener("keydown",sound,{once:true});if(noticeTimer)clearTimeout(noticeTimer);noticeTimer=setTimeout(hideNotice,dur||11000);}
+function popup(title,sub,dur){
+var nodes=notice.childNodes;
+for(var i=0;i<nodes.length;i++){if(nodes[i].nodeType===3){nodes[i].nodeValue=title;break;}}
+var sp=notice.getElementsByTagName("span")[0];
+if(sp)sp.textContent=sub||"";
+notice.classList.add("center");
+notice.classList.remove("hide");
+notice.classList.remove("show");
+void notice.offsetWidth;
+played=false;
+showNotice(dur||5000);
+}
+notice.onclick=function(){hideNotice();panel.classList.add("open");};
+setTimeout(function(){notice.classList.remove("center");showNotice();},1200);
+})();
+</script>
+
+</body>
+</html>

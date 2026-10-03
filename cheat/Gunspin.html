@@ -1,0 +1,214 @@
+
+
+
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>google.com</title>
+    <link rel="shortcut icon" href="https://cdn.jsdelivr.net/gh/organig-schools6/99@main/TemplateData/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/organig-schools6/99@main/TemplateData/style.css">
+    <script src="https://cdn.jsdelivr.net/gh/organig-schools6/99@main/TemplateData/UnityProgress.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/organig-schools6/99@main/Build/UnityLoader.js"></script>
+    <script>
+      //var unityInstance = UnityLoader.instantiate("unityContainer", "Build/GunSpin WebGL FinalVersion.json", {onProgress: UnityProgress});
+      window.gameInstance = UnityLoader.instantiate("unityContainer", "https://cdn.jsdelivr.net/gh/gru6nny/ohd@main/GunSpin%20WebGL%20FinalVersion1.json");
+    </script>
+    <style>
+        * { 
+            margin: 0; padding: 0; 
+        } 
+        body { 
+            background: black; 
+        }
+        div#unityContainer {
+            margin: auto !important;
+            position: absolute !important;
+            left: 50%;
+            top: 50%;
+            -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+            width: 720px; 
+            height: 480px;
+            width: 150vh !important;
+            height: 100vh !important;
+        }
+        .footer {
+        display:none 
+        }
+    </style>
+  </head>
+  <body style="overflow:hidden;">
+    <div class="webgl-content">
+      <div id="unityContainer"></div>
+      <div class="footer">
+        <div class="webgl-logo"></div>
+        <div class="fullscreen" onclick="gameInstance.SetFullscreen(1)"></div>
+        <div class="title">GunSpin</div>
+      </div>
+    </div>
+
+<style>
+#modBtn{position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:8px 14px;background:#000;color:#0f0;border:1px solid #0f0;font:bold 13px monospace;cursor:pointer}
+#modBtn:hover{background:#0f0;color:#000}
+#modPanel{position:fixed;right:10px;bottom:50px;z-index:2147483647;display:none;width:280px;max-height:82vh;overflow:auto;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace}
+#modPanel.open{display:block}
+#modPanel .head{display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid #0f0;font-weight:bold}
+#modPanel .head span{cursor:pointer}
+#modPanel .body{padding:8px}
+#modPanel .sec{margin:8px 0 2px;padding:0 2px;color:#9f9;font-weight:bold;font-size:10px;letter-spacing:1px}
+#modPanel button{display:block;width:100%;margin:5px 0;padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace;cursor:pointer}
+#modPanel button:hover{background:#0f0;color:#000}
+#modNote{margin-top:6px;border-top:1px solid #0f0;padding-top:5px;min-height:12px;overflow-wrap:anywhere}
+#modNotice{position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:250px;padding:10px 12px;background:#000;color:#0f0;border:1px solid #0f0;border-radius:6px;font:bold 12px monospace;box-shadow:0 0 14px rgba(0,255,0,.35);cursor:pointer;opacity:0;transform:scale(.4);pointer-events:none}
+#modNotice.show{animation:modPop .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite;pointer-events:auto}
+#modNotice.hide{animation:modOut .35s ease forwards;pointer-events:none}
+#modNotice span{display:block;margin-top:4px;color:#9f9;font-weight:normal;font-size:10.5px}
+@keyframes modPop{0%{opacity:0;transform:scale(.4) translateY(24px)}60%{opacity:1;transform:scale(1.1) translateY(-6px)}80%{transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes modOut{to{opacity:0;transform:scale(.7) translateY(10px)}}
+@keyframes modPulse{0%,100%{box-shadow:0 0 12px rgba(0,255,0,.35)}50%{box-shadow:0 0 22px rgba(255,45,149,.8)}}
+</style>
+<button id="modBtn" type="button">MODS</button>
+<div id="modPanel">
+<div class="head">GUNSPIN MODS <span id="modClose">X</span></div>
+<div class="body">
+<div class="sec">CHEATS</div>
+<button id="modMoney" type="button">INF MONEY</button>
+<button id="modGuns" type="button">UNLOCK ALL GUNS</button>
+<button id="modUpg" type="button">MAX UPGRADES</button>
+<div class="sec">TOOLS</div>
+<button id="modWipe" type="button">WIPE SAVE</button>
+<div id="modNote">ready</div>
+</div>
+</div>
+<div id="modNotice">MOD PANEL AVAILABLE<span>click MODS (bottom right) to open</span></div>
+<script>
+(function(){
+var noteEl=document.getElementById("modNote");
+function note(s){noteEl.textContent=s;}
+var panel=document.getElementById("modPanel");
+var notice=document.getElementById("modNotice");
+document.getElementById("modBtn").onclick=function(){hideNotice();panel.classList.toggle("open");};
+document.getElementById("modClose").onclick=function(){panel.classList.remove("open");};
+window.addEventListener("keydown",function(e){if(e.key==="`"){panel.classList.toggle("open");}});
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function req(r){return new Promise(function(res,rej){r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function openDB(n){return new Promise(function(res,rej){var r=indexedDB.open(n);r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function findRecs(b){
+var recs=[];
+for(var i=0;i<b.length-10;i++){
+if(b[i]===0x0f&&b[i+9]===0x08){
+var id=b[i+1]|(b[i+2]<<8)|(b[i+3]<<16)|(b[i+4]<<24);
+var len=b[i+5]|(b[i+6]<<8)|(b[i+7]<<16)|(b[i+8]<<24);
+if(id>0&&id<100&&len>=0&&len<1000)recs.push({off:i,id:id,len:len,elems:i+10});
+}
+}
+return recs;
+}
+async function findDatKey(){
+var db=await openDB("/idbfs");
+if(!db.objectStoreNames.contains("FILE_DATA")){db.close();return null;}
+var st=db.transaction("FILE_DATA","readonly").objectStore("FILE_DATA");
+var keys=await req(st.getAllKeys());
+db.close();
+for(var i=0;i<keys.length;i++){
+if(keys[i].indexOf("Analytics")>=0)continue;
+if(keys[i].indexOf("PlayerPrefs")>=0)continue;
+if(keys[i].toLowerCase().indexOf(".dat")>=0)return keys[i];
+}
+return null;
+}
+async function patchSave(fn){
+var key=await findDatKey();
+if(!key){
+try{var g=window.gameInstance||window.unityInstance;if(g)g.SendMessage("SaveLoad","SaveData");}catch(e){}
+await sleep(800);
+key=await findDatKey();
+if(!key)return "no save file";
+}
+try{
+var db=await openDB("/idbfs");
+var st=db.transaction("FILE_DATA","readonly").objectStore("FILE_DATA");
+var rec=await req(st.get(key));
+var b=rec.contents instanceof Uint8Array?rec.contents:new Uint8Array(rec.contents);
+b=new Uint8Array(b);
+var recs=findRecs(b);
+if(!recs.length)return "save format not recognized";
+var dv=new DataView(b.buffer,b.byteOffset,b.byteLength);
+var ok=fn(b,dv,recs);
+if(!ok)return "patch failed";
+var tx=db.transaction("FILE_DATA","readwrite");
+tx.objectStore("FILE_DATA").put({timestamp:new Date(),mode:rec.mode||33206,contents:b},key);
+await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=function(){rej(tx.error);};});
+db.close();
+return "ok";
+}catch(e){return "ERR "+e.message;}
+}
+function reloadSoon(){setTimeout(function(){location.reload();},800);}
+document.getElementById("modMoney").onclick=async function(){
+note("patching money...");
+var r=await patchSave(function(b,dv,recs){
+var off=recs[0].off-37;
+if(off<0)return false;
+dv.setInt32(off,999999999,true);
+return true;
+});
+if(r==="ok"){note("infinite money - reloading");reloadSoon();}
+else{
+try{var g=window.gameInstance||window.unityInstance;if(g){g.SendMessage("UIUpdate","AddCoins","999999999");note("money added (runtime)");return;}}catch(e){}
+note(r);
+}
+};
+document.getElementById("modGuns").onclick=async function(){
+note("unlocking all guns...");
+var r=await patchSave(function(b,dv,recs){
+var found=false;
+var base=recs[0].off-37;
+if(base>=0){dv.setInt32(base-6,99,true);dv.setInt32(base+8,99,true);}
+for(var j=0;j<recs.length;j++){
+var id=recs[j].id,rec=recs[j],v;
+if(id===3)v=99;
+else if(id===4)v=99;
+else if(id===5)v=0;
+else if(id===6)v=1;
+else continue;
+for(var k=0;k<rec.len;k++)dv.setInt32(rec.elems+k*4,v,true);
+found=true;
+}
+return found;
+});
+note(r==="ok"?"all guns unlocked - reloading":r);
+if(r==="ok")reloadSoon();
+};
+document.getElementById("modUpg").onclick=async function(){
+note("maxing upgrades...");
+var r=await patchSave(function(b,dv,recs){
+if(recs.length<2)return false;
+var rec=recs[1];
+for(var i=0;i<rec.len;i++)dv.setInt32(rec.elems+i*4,9999,true);
+return true;
+});
+note(r==="ok"?"max upgrades applied - reloading":r);
+if(r==="ok")reloadSoon();
+};
+document.getElementById("modWipe").onclick=function(){
+if(!confirm("Wipe the save and reload?"))return;
+try{localStorage.clear();}catch(e){}
+try{sessionStorage.clear();}catch(e){}
+try{if(indexedDB.databases){indexedDB.databases().then(function(dbs){dbs.forEach(function(db){if(db.name)indexedDB.deleteDatabase(db.name);});location.reload();});return;}}catch(e){}
+location.reload();
+};
+function hideNotice(){notice.classList.remove("show");notice.classList.add("hide");setTimeout(function(){notice.classList.remove("hide");},400);}
+var nAudio=null,played=false,noticeTimer=null;
+function sound(){if(played||!notice.classList.contains("show"))return;try{var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;if(!nAudio||nAudio.state==="closed")nAudio=new AC();var go=function(){if(played||nAudio.state!=="running")return;played=true;var t=nAudio.currentTime;[880,1174.66].forEach(function(f,i){var o=nAudio.createOscillator(),g=nAudio.createGain();o.type="sine";o.frequency.setValueAtTime(f,t+i*.09);g.gain.setValueAtTime(.0001,t+i*.09);g.gain.exponentialRampToValueAtTime(.09,t+i*.09+.02);g.gain.exponentialRampToValueAtTime(.0001,t+i*.09+.35);o.connect(g).connect(nAudio.destination);o.start(t+i*.09);o.stop(t+i*.09+.4);});};if(nAudio.state==="suspended")nAudio.resume().then(go).catch(function(){});else go();}catch(e){}}
+function showNotice(dur){notice.classList.add("show");sound();window.addEventListener("pointerdown",sound,{once:true});window.addEventListener("keydown",sound,{once:true});if(noticeTimer)clearTimeout(noticeTimer);noticeTimer=setTimeout(hideNotice,dur||11000);}
+notice.onclick=function(){hideNotice();panel.classList.add("open");};
+setTimeout(function(){showNotice();},1200);
+})();
+</script>
+
+</body>
+</html>
+
+
