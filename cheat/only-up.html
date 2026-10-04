@@ -1,0 +1,399 @@
+
+
+
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<link rel="shortcut icon" href="https://cdn.jsdelivr.net/gh/gulamen/gulax7@main/TemplateData/favicon.ico"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/gulamen/gulax7@main/TemplateData/style.css"/>
+<style>
+    canvas:focus { outline: none; }
+</style>
+</head>
+<body class="dark">
+
+<div id="unity-container" class="unity-desktop">
+    <canvas id="unity-canvas"></canvas>
+</div>
+
+<div id="loading-cover" style="display:none;">
+    <div id="unity-loading-bar">
+        <div id="unity-logo"><img src="https://cdn.jsdelivr.net/gh/gulamen/gulax7@main/logo.png" onerror="this.style.display='none'"/></div>
+        <div id="unity-progress-bar-empty" style="display:none;">
+            <div id="unity-progress-bar-full"></div>
+        </div>
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<script>
+const BUILD_URL = "https://cdn.jsdelivr.net/gh/gulamen/gulax7@2ab30ac/Build";
+
+/* ============================================================
+   GLOBALS — orijinal adlar korundu
+   ============================================================ */
+var player         = null;
+var leaderboard    = null;
+var payments       = null;
+var promptCanShow  = false;
+var reviewCanShow  = false;
+var initSDK        = true;   /* stub: hemen true */
+var initGame       = false;
+var photoSizeForInit;
+var scopesForInit;
+var firstAd        = true;
+var myGameInstance = null;
+
+/* ysdk stub — window.ysdk olarak da açılıyor */
+window.ysdk = {
+    environment: {
+        i18n:    { lang: 'en', tld: 'com' },
+        app:     { id: '0' },
+        browser: { lang: 'en' },
+        payload: ''
+    },
+    deviceInfo: {
+        type:      'desktop',
+        isMobile:  () => false,
+        isDesktop: () => true,
+        isTablet:  () => false,
+        isTV:      () => false,
+    },
+    screen: { fullscreen: { status: 'off', request: ()=>{}, exit: ()=>{} } },
+    adv: {
+        showFullscreenAdv: (o) => {
+            o?.callbacks?.onOpen?.();
+            setTimeout(() => { o?.callbacks?.onClose?.(true); }, 300);
+        },
+        showRewardedVideo: (o) => {
+            o?.callbacks?.onOpen?.();
+            setTimeout(() => {
+                o?.callbacks?.onRewarded?.();
+                setTimeout(() => { o?.callbacks?.onClose?.(); }, 200);
+            }, 500);
+        },
+        showBannerAdv:      () => Promise.resolve({ stickyAdvIsShowing: false }),
+        hideBannerAdv:      () => Promise.resolve(),
+        getBannerAdvStatus: () => Promise.resolve({ stickyAdvIsShowing: false }),
+    },
+    auth:     { openAuthDialog: () => Promise.resolve() },
+    feedback: {
+        canReview:     () => Promise.resolve({ value: false, reason: 'YSDK_DISABLED' }),
+        requestReview: () => Promise.resolve({ feedbackSent: false }),
+    },
+    shortcut: {
+        canShowPrompt: () => Promise.resolve({ canShow: false }),
+        showPrompt:    () => Promise.resolve({ outcome: 'rejected' }),
+    },
+    features: {
+        LoadingAPI:  { ready: () => {} },
+        GameplayAPI: { start: () => {}, stop: () => {} },
+        GamesAPI:    { getAllGames: () => Promise.reject() },
+    },
+    getLeaderboards: () => Promise.resolve({
+        getLeaderboardDescription: () => Promise.resolve({ default: false, description: { invert_sort_order: false, score_format: { options: { decimal_offset: 0 } }, type: 'numeric' } }),
+        getLeaderboardEntries:     () => Promise.resolve({ entries: [] }),
+        setLeaderboardScore:       () => {},
+    }),
+    getPlayer:   (o) => Promise.resolve({
+        getMode:         () => 'lite',
+        getName:         () => '',
+        getUniqueID:     () => 'unauthorized',
+        getPhoto:        () => 'null',
+        getPayingStatus: () => 'unknown',
+        getData:         () => Promise.resolve({}),
+        setData:         () => Promise.resolve(),
+    }),
+    getPayments: () => Promise.reject(new Error('payments not available')),
+    on: () => {},
+};
+var ysdk = window.ysdk;
+
+/* ============================================================
+   SendMessage helper
+   ============================================================ */
+function SendYG(method, arg) {
+    if (!myGameInstance) return;
+    try {
+        if (arg !== undefined) myGameInstance.SendMessage('YandexGame', method, arg);
+        else                   myGameInstance.SendMessage('YandexGame', method);
+    } catch(e) {}
+}
+
+/* ============================================================
+   SDK FONKSİYONLARI — orijinal imzalar
+   ============================================================ */
+function FocusGame() { window.focus(); canvas.focus(); }
+
+/* InitSDK — Unity'den çağrılır, oyunu başlatır */
+function InitSDK(photoSize, scopes) {
+    console.log('Init GAME');
+    initGame       = true;
+    photoSizeForInit = photoSize;
+    scopesForInit    = scopes;
+
+    ysdk.features.LoadingAPI?.ready();
+    /* Player stub — lite modda */
+    NotAuthorized();
+}
+
+function NotAuthorized() {
+    SendYG('SetInitializationSDK', JSON.stringify({
+        playerAuth: 'rejected', playerName: 'unauthorized',
+        playerId: 'unauthorized', playerPhoto: 'null'
+    }));
+}
+
+function InitPlayer(photoSize, scopes) { NotAuthorized(); }
+function OpenAuthDialog()              { NotAuthorized(); }
+
+/* Fullscreen */
+function FullAdShow() {
+    ysdk.adv.showFullscreenAdv({
+        callbacks: {
+            onOpen:  () => { SendYG('OpenFullAd'); },
+            onClose: (w) => { SendYG('CloseFullAd', w ? 'true' : 'false'); window.focus(); },
+            onError: () => { SendYG('ErrorFullAd'); window.focus(); }
+        }
+    });
+}
+/* Orijinal kodda typo vardı: FullscreenShow → FullAdShow ile eşleştir */
+var FullscreenShow = FullAdShow;
+
+/* Rewarded */
+function RewardedShow(id) {
+    ysdk.adv.showRewardedVideo({
+        callbacks: {
+            onOpen:     () => { SendYG('OpenVideo'); },
+            onRewarded: () => { SendYG('RewardVideo', id); },
+            onClose:    () => { SendYG('CloseVideo'); window.focus(); },
+            onError:    () => { SendYG('ErrorVideo'); }
+        }
+    });
+}
+
+function StickyAdActivity() {}
+
+/* Cloud */
+function SaveCloud()  {}
+function LoadCloud()  { SendYG('SetLoadSaves', 'noData'); }
+
+/* Payments */
+function InitPayments() {}
+function GetPayments()  { SendYG('PaymentsEntries', JSON.stringify({ id:[], title:[], description:[], imageURI:[], priceValue:[], purchased:[] })); }
+function BuyPayments(id)      { SendYG('OnPurchaseFailed', id); window.focus(); }
+function DeletePurchase()     {}
+function DeleteAllPurchases() {}
+
+/* Leaderboard */
+function InitLeaderboard()    { SendYG('InitializedLB'); }
+function SetLeaderboardScores() {}
+function GetLeaderboardScores(nameLB, maxPlayers) {
+    SendYG('LeaderboardEntries', JSON.stringify({
+        nameLB: nameLB, entries: 'No data',
+        rank: [], photo: [], playersName: [], scorePlayers: []
+    }));
+}
+function EntriesLB() {}
+
+/* Language / Env */
+function LanguageRequest() { SendYG('SetLanguage', 'en'); }
+function RequestingEnvironmentData() {
+    SendYG('SetEnvironmentData', JSON.stringify({
+        language:'en', domain:'com', deviceType:'desktop',
+        isMobile:false, isDesktop:true, isTablet:false, isTV:false,
+        appID:'0', browserLang:'en', payload:'',
+        promptCanShow:false, reviewCanShow:false
+    }));
+}
+
+/* Review / Prompt */
+function Review()     { SendYG('ReviewSent', 'false'); window.focus(); }
+function PromptShow() { SendYG('OnPromptFail'); window.focus(); }
+
+/* Diğer */
+function PaintRBT()            {}
+function StaticRBTDeactivate() {}
+
+/* ============================================================
+   SETUP
+   ============================================================ */
+const container        = document.querySelector("#unity-container");
+const canvas           = document.querySelector("#unity-canvas");
+const loadingCover     = document.querySelector("#loading-cover");
+const progressBarEmpty = document.querySelector("#unity-progress-bar-empty");
+const progressBarFull  = document.querySelector("#unity-progress-bar-full");
+const spinner          = document.querySelector('.spinner');
+
+canvas.style.background = "url('https://cdn.jsdelivr.net/gh/gulamen/gulax7@main/background.png') center / cover";
+loadingCover.style.display = "";
+
+if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    container.className = "unity-mobile";
+}
+
+canvas.addEventListener("touchstart",  () => window.focus());
+canvas.addEventListener("pointerdown", () => window.focus());
+
+/* ============================================================
+   UNITY LOADER
+   ============================================================ */
+const config = {
+    dataUrl:            `${BUILD_URL}/OnlyUp!.data.unityweb`,
+    frameworkUrl:       `${BUILD_URL}/OnlyUp!.framework.js.unityweb`,
+    codeUrl:            `${BUILD_URL}/OnlyUp!.wasm.unityweb`,
+    streamingAssetsUrl: "StreamingAssets",
+    companyName:        "DefaultCompany",
+    productName:        "WallJumping",
+    productVersion:     "1.0",
+};
+
+const script  = document.createElement("script");
+script.src    = `${BUILD_URL}/OnlyUp!.loader.js`;
+script.onload = () => {
+    createUnityInstance(canvas, config, (progress) => {
+        spinner.style.display          = "none";
+        progressBarEmpty.style.display = "";
+        progressBarFull.style.width    = `${100 * progress}%`;
+    }).then((inst) => {
+        myGameInstance = inst;
+        loadingCover.style.display = "none";
+        canvas.focus();
+    }).catch(e => { console.error(e); });
+};
+document.body.appendChild(script);
+</script>
+
+
+<style>
+#modBtn{position:fixed;right:10px;bottom:10px;z-index:2147483647;padding:8px 14px;background:#000;color:#0f0;border:1px solid #0f0;font:bold 13px monospace;cursor:pointer}
+#modBtn:hover{background:#0f0;color:#000}
+#modPanel{position:fixed;right:10px;bottom:50px;z-index:2147483647;display:none;width:290px;max-height:82vh;overflow:auto;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace}
+#modPanel.open{display:block}
+#modPanel .head{display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid #0f0;font-weight:bold}
+#modPanel .head span{cursor:pointer}
+#modPanel .body{padding:8px}
+#modPanel .sec{margin:8px 0 2px;padding:0 2px;color:#9f9;font-weight:bold;font-size:10px;letter-spacing:1px}
+#modPanel button{display:block;width:100%;margin:5px 0;padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font:12px monospace;cursor:pointer}
+#modPanel button:hover{background:#0f0;color:#000}
+#modPanel button.on{background:#0f0;color:#000}
+#modNote{margin-top:6px;border-top:1px solid #0f0;padding-top:5px;min-height:12px;overflow-wrap:anywhere}
+#modNotice{position:fixed;left:12px;bottom:12px;z-index:2147483647;max-width:260px;padding:10px 12px;background:#000;color:#0f0;border:1px solid #0f0;border-radius:6px;font:bold 12px monospace;box-shadow:0 0 14px rgba(0,255,0,.35);cursor:pointer;opacity:0;transform:scale(.4);pointer-events:none}
+#modNotice.show{animation:modPop .6s cubic-bezier(.2,1.6,.4,1) forwards,modPulse 1.8s ease-in-out .6s infinite;pointer-events:auto}
+#modNotice.hide{animation:modOut .35s ease forwards;pointer-events:none}
+#modNotice span{display:block;margin-top:4px;color:#9f9;font-weight:normal;font-size:10.5px}
+@keyframes modPop{0%{opacity:0;transform:scale(.4) translateY(24px)}60%{opacity:1;transform:scale(1.1) translateY(-6px)}80%{transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes modOut{to{opacity:0;transform:scale(.7) translateY(10px)}}
+@keyframes modPulse{0%,100%{box-shadow:0 0 12px rgba(0,255,0,.35)}50%{box-shadow:0 0 22px rgba(255,45,149,.8)}}
+</style>
+<button id="modBtn" type="button">MODS</button>
+<div id="modPanel">
+<div class="head">ONLY UP MODS <span id="modClose">X</span></div>
+<div class="body">
+<div class="sec">CHEATS</div>
+<button id="modSkins" type="button">UNLOCK ALL SKINS</button>
+<button id="modLevels" type="button">UNLOCK ALL LEVELS</button>
+<button id="modGrav" type="button">LOW GRAVITY: OFF</button>
+<div class="sec">TOOLS</div>
+<button id="modWipe" type="button">WIPE SAVE</button>
+<div id="modNote">ready</div>
+</div>
+</div>
+<div id="modNotice">MOD PANEL AVAILABLE<span>click MODS (bottom right) to open</span></div>
+<script>
+(function(){
+var noteEl=document.getElementById("modNote");
+function note(s){noteEl.textContent=s;}
+var panel=document.getElementById("modPanel");
+var notice=document.getElementById("modNotice");
+document.getElementById("modBtn").onclick=function(){hideNotice();panel.classList.toggle("open");};
+document.getElementById("modClose").onclick=function(){panel.classList.remove("open");};
+window.addEventListener("keydown",function(e){if(e.key==="`"){panel.classList.toggle("open");}});
+function getSave(){try{return JSON.parse(localStorage.getItem("savesData")||"{}");}catch(e){return {};}}
+function setSave(o){try{localStorage.setItem("savesData",JSON.stringify(o));}catch(e){}}
+function reloadSoon(){setTimeout(function(){location.reload();},800);}
+
+/* ---- Unity access ---- */
+function mod(){return (window.myGameInstance&&window.myGameInstance.Module)?window.myGameInstance.Module:null;}
+function heap(){var m=mod();return m?m.HEAPF32:null;}
+
+/* ---- low gravity (patch live Box2D world gravity) ---- */
+var GRAV_IDX=7737077,gravIdx=-1;
+function findGrav(){
+  var h=heap();if(!h)return -1;
+  if(gravIdx>=0&&Math.abs(h[gravIdx])<0.05&&h[gravIdx+1]<-0.5)return gravIdx;
+  if(Math.abs(h[GRAV_IDX])<0.05&&h[GRAV_IDX+1]<-0.5){gravIdx=GRAV_IDX;return gravIdx;}
+  for(var i=7000000;i<8500000&&i<h.length-1;i++){if(Math.abs(h[i])<0.01&&h[i+1]<-9.0&&h[i+1]>-10.6){gravIdx=i;return i;}}
+  for(var i=0;i<h.length-1;i++){if(Math.abs(h[i])<0.01&&h[i+1]<-9.0&&h[i+1]>-10.6){gravIdx=i;return i;}}
+  return -1;
+}
+function setGrav(v){var h=heap();if(!h)return;var i=findGrav();if(i>=0)h[i+1]=v;}
+
+/* ---- toggles ---- */
+var lowGrav=false,gravTimer=null;
+document.addEventListener("mousedown",function(e){
+  var t=e.target;
+  if(t&&t.tagName==="BUTTON")e.preventDefault();
+},true);
+document.getElementById("modGrav").onclick=function(){
+  lowGrav=!lowGrav;
+  this.textContent="LOW GRAVITY: "+(lowGrav?"ON":"OFF");
+  this.classList.toggle("on",lowGrav);
+  if(lowGrav){
+    setGrav(-2.5);
+    gravTimer=setInterval(function(){setGrav(-2.5);},250);
+    note("low gravity on");
+  }else{
+    if(gravTimer){clearInterval(gravTimer);gravTimer=null;}
+    setGrav(-9.81);
+    note("low gravity off");
+  }
+};
+
+/* ---- unlock all levels (ids 1-100) + maps (111-120) ---- */
+document.getElementById("modLevels").onclick=function(){
+  var s=getSave();
+  var lv=[],mp=[];
+  for(var i=1;i<=100;i++)lv.push(i);
+  for(var i=111;i<=120;i++)mp.push(i);
+  s.unlockedLevelsIDs=lv;
+  s.unlockedMapIDs=mp;
+  setSave(s);
+  note("all levels unlocked - reloading");
+  reloadSoon();
+};
+
+/* ---- unlock all skins (heroes 1-22) ---- */
+document.getElementById("modSkins").onclick=function(){
+  var s=getSave();
+  var ids=[];
+  for(var i=1;i<=22;i++)ids.push(i);
+  s.unlockedHeroesIDs=ids;
+  setSave(s);
+  note("all skins unlocked - reloading");
+  reloadSoon();
+};
+
+/* ---- wipe save ---- */
+document.getElementById("modWipe").onclick=function(){
+  if(!confirm("Wipe the save and reload?"))return;
+  try{localStorage.clear();}catch(e){}
+  try{sessionStorage.clear();}catch(e){}
+  try{if(indexedDB.databases){indexedDB.databases().then(function(dbs){dbs.forEach(function(db){if(db.name)indexedDB.deleteDatabase(db.name);});location.reload();});return;}}catch(e){}
+  location.reload();
+};
+
+/* ---- notice ---- */
+function hideNotice(){notice.classList.remove("show");notice.classList.add("hide");setTimeout(function(){notice.classList.remove("hide");},400);}
+var noticeTimer=null;
+function showNotice(dur){notice.classList.add("show");if(noticeTimer)clearTimeout(noticeTimer);noticeTimer=setTimeout(hideNotice,dur||11000);}
+notice.onclick=function(){hideNotice();panel.classList.add("open");};
+setTimeout(function(){showNotice();},1200);
+})();
+</script>
+</body>
+</html>
+
