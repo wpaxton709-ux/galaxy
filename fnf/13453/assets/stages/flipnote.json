@@ -1,9 +1,0 @@
-{
-	"directory": "flipnote",
-	"defaultZoom": 0.6,
-	"isPixelStage": false,
-
-	"boyfriend": [980, 120],
-	"girlfriend": [480, 150],
-	"opponent": [200, 120]
-}

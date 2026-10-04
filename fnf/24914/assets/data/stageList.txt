@@ -1,9 +1,0 @@
-stage
-hex
-hexss
-hexn
-hexg
-hexw
-hexwd
-hexwstage
-hexwdg
