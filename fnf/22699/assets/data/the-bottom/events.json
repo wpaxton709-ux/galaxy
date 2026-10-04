@@ -1,0 +1,179 @@
+{
+	"song": {
+		"speed": 2.8,
+		"stage": "stage",
+		"player1": "bf",
+		"player2": "sponge",
+		"player3": null,
+		"events": [
+			[
+				12000,
+				[
+					[
+						"Flash_Camera",
+						"0.2",
+						""
+					]
+				]
+			],
+			[
+				12093.75,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.7",
+						""
+					]
+				]
+			],
+			[
+				36000,
+				[
+					[
+						"Flash_Camera",
+						"0.2",
+						""
+					]
+				]
+			],
+			[
+				36093.75,
+				[
+					[
+						"Set_Cam_Zoom",
+						"1.1",
+						""
+					]
+				]
+			],
+			[
+				48000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.6",
+						""
+					]
+				]
+			],
+			[
+				54000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.8",
+						""
+					]
+				]
+			],
+			[
+				66000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.7",
+						""
+					]
+				]
+			],
+			[
+				67500,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.8",
+						""
+					]
+				]
+			],
+			[
+				71531.25,
+				[
+					[
+						"Set_Cam_Zoom",
+						"1.1",
+						""
+					]
+				]
+			],
+			[
+				78000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.9",
+						""
+					]
+				]
+			],
+			[
+				84000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"1.1",
+						""
+					]
+				]
+			],
+			[
+				89531.25,
+				[
+					[
+						"Flash_Camera_Black",
+						"0.1",
+						""
+					]
+				]
+			],
+			[
+				89625,
+				[
+					[
+						"Flash_Camera_Black",
+						"0.1",
+						""
+					]
+				]
+			],
+			[
+				89812.5,
+				[
+					[
+						"Flash_Camera_Black",
+						"0.1",
+						""
+					]
+				]
+			],
+			[
+				89906.25,
+				[
+					[
+						"Flash_Camera_Black",
+						"0.7",
+						""
+					]
+				]
+			],
+			[
+				90000,
+				[
+					[
+						"Set_Cam_Zoom",
+						"0.6",
+						""
+					]
+				]
+			]
+		],
+		"notes": [],
+		"splashSkin": "noteSplashes",
+		"validScore": false,
+		"gfVersion": "gf",
+		"bpm": 160,
+		"arrowSkin": "",
+		"needsVoices": true,
+		"song": "spongebob"
+	}
+}

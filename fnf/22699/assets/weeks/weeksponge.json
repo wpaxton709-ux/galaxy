@@ -1,0 +1,32 @@
+{
+	"songs": [
+		[
+			"the-bottom",
+			"sponge",
+			[
+				46,
+				213,
+				253
+			]
+		]
+	],
+	"hiddenUntilUnlocked": false,
+	"hideFreeplay": false,
+	"weekBackground": "bottom",
+	"difficulties": "normal",
+	"weekCharacters": [
+		"",
+		"",
+		""
+	],
+	"storyName": "vs spongebob",
+	"weekName": "vs spongebob",
+	"freeplayColor": [
+		146,
+		113,
+		253
+	],
+	"hideStoryMode": false,
+	"weekBefore": "tutorial",
+	"startUnlocked": true
+}
